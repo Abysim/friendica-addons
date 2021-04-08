@@ -1031,6 +1031,7 @@ function twitter_do_mirrorpost(App $a, $uid, $post)
 
 		$datarray['body'] .= $item['body'] . '[/share]';
 	} else {
+		return [];
 		$item = twitter_createpost($a, $uid, $post, ['id' => 0], false, false, false, -1);
 
 		if (empty($item['body'])) {
