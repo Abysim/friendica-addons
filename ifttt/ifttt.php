@@ -181,7 +181,11 @@ function ifttt_message($uid, $item)
 			$data['text'] = $item['description'];
 		}
 
-		$post['body'] .= "\n" . PageInfo::getFooterFromData($data);
+		if (strpos($item['link'], 'podcastics.com/player/cover') === false) {
+			$_REQUEST['body'] .= add_page_info_data($data);
+		} else {
+			$post['body'] .= "\n" . PageInfo::getFooterFromData($data);
+		}
 	} elseif (($item['type'] == 'photo') && ($item['image'] != '')) {
 		$link = $item['image'];
 		$post['body'] .= "\n\n[img]" . $item['image'] . "[/img]\n";
