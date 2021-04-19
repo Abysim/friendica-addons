@@ -181,10 +181,10 @@ function ifttt_message($uid, $item)
 			$data['text'] = $item['description'];
 		}
 
-		if (strpos($item['link'], 'podcastics.com/player/cover') === false) {
-			$_REQUEST['body'] .= add_page_info_data($data);
-		} else {
+		if (strpos($link, 'podcastics.com/player/cover') === false) {
 			$post['body'] .= "\n" . PageInfo::getFooterFromData($data);
+		} else {
+			$post['body'] .= "\n\n[iframe]" . $item['link'] . "[/iframe]\n";
 		}
 	} elseif (($item['type'] == 'photo') && ($item['image'] != '')) {
 		$link = $item['image'];
