@@ -184,7 +184,7 @@ function ifttt_message($uid, $item)
 		if (strpos($item['url'], 'podcastics.com/podcast/episode') === false) {
 			$post['body'] .= "\n" . PageInfo::getFooterFromData($data);
 		} else {
-			$post['body'] .= "\n\n[audio]" . $item['url']  . "[/audio]\n[url]" . $link . "[/url]";
+			$post['body'] .= "\n\n[url]" . $link . "[/url]\n[audio]" . $item['url']  . "[/audio]";
 		}
 	} elseif (($item['type'] == 'photo') && ($item['image'] != '')) {
 		$link = $item['image'];
