@@ -169,7 +169,7 @@ function ifttt_message($uid, $item)
 	$post['app'] = 'IFTTT';
 	$post['title'] = '';
 	$post['body'] = $item['msg'];
-	$post['cat'] = $item['cat'];
+	$post['category'] = $item['cat'];
 	//$post['date'] = $item['date'];
 	//$post['uri'] = $item['url'];
 
