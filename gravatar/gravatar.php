@@ -13,7 +13,7 @@ use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\Database\DBA;
 use Friendica\DI;
-use Friendica\Util\ConfigFileLoader;
+use Friendica\Core\Config\Util\ConfigFileManager;
 use Friendica\Util\Strings;
 
 /**
@@ -23,21 +23,21 @@ function gravatar_install() {
 	Hook::register('load_config',   'addon/gravatar/gravatar.php', 'gravatar_load_config');
 	Hook::register('avatar_lookup', 'addon/gravatar/gravatar.php', 'gravatar_lookup');
 
-	Logger::log("registered gravatar in avatar_lookup hook");
+	Logger::notice("registered gravatar in avatar_lookup hook");
 }
 
-function gravatar_load_config(App $a, ConfigFileLoader $loader)
+function gravatar_load_config(ConfigFileManager $loader)
 {
-	$a->getConfigCache()->load($loader->loadAddonConfig('gravatar'));
+	DI::app()->getConfigCache()->load($loader->loadAddonConfig('gravatar'), \Friendica\Core\Config\ValueObject\Cache::SOURCE_STATIC);
 }
 
 /**
  * Looks up the avatar at gravatar.com and returns the URL.
  *
- * @param $a array
  * @param &$b array
  */
-function gravatar_lookup($a, &$b) {
+function gravatar_lookup(array &$b)
+{
 	$default_avatar = DI::config()->get('gravatar', 'default_avatar');
 	$rating = DI::config()->get('gravatar', 'rating');
 
@@ -61,17 +61,20 @@ function gravatar_lookup($a, &$b) {
 /**
  * Display admin settings for this addon
  */
-function gravatar_addon_admin (&$a, &$o) {
+function gravatar_addon_admin (string &$o)
+{
 	$t = Renderer::getMarkupTemplate( "admin.tpl", "addon/gravatar/" );
 
 	$default_avatar = DI::config()->get('gravatar', 'default_avatar');
 	$rating = DI::config()->get('gravatar', 'rating');
 
 	// set default values for first configuration
-	if(! $default_avatar)
+	if (!$default_avatar) {
 		$default_avatar = 'identicon'; // pseudo-random geometric pattern based on email hash
-	if(! $rating)
+	}
+	if (!$rating) {
 		$rating = 'g'; // suitable for display on all websites with any audience type
+	}
 
 	// Available options for the select boxes
 	$default_avatars = [
@@ -89,10 +92,7 @@ function gravatar_addon_admin (&$a, &$o) {
 	];
 
 	// Check if Libravatar is enabled and show warning
-	$r = q("SELECT * FROM `addon` WHERE `name` = '%s' and `installed` = 1",
-		DBA::escape('libravatar')
-	);
-	if (count($r)) {
+	if (!empty(DI::config()->get('addons', 'libravatar'))) {
 		$o = '<h5>' .DI::l10n()->t('Information') .'</h5><p>' .DI::l10n()->t('Libravatar addon is installed, too. Please disable Libravatar addon or this Gravatar addon.<br>The Libravatar addon will fall back to Gravatar if nothing was found at Libravatar.') .'</p><br><br>';
 	}
 
@@ -108,11 +108,10 @@ function gravatar_addon_admin (&$a, &$o) {
 /**
  * Save admin settings
  */
-function gravatar_addon_admin_post (&$a) {
+function gravatar_addon_admin_post ()
+{
 	BaseModule::checkFormSecurityToken('gravatarsave');
 
-	$default_avatar = (!empty($_POST['avatar']) ? Strings::escapeTags(trim($_POST['avatar'])) : 'identicon');
-	$rating = (!empty($_POST['rating']) ? Strings::escapeTags(trim($_POST['rating'])) : 'g');
-	DI::config()->set('gravatar', 'default_avatar', $default_avatar);
-	DI::config()->set('gravatar', 'rating', $rating);
+	DI::config()->set('gravatar', 'default_avatar', trim($_POST['avatar'] ?? 'identicon'));
+	DI::config()->set('gravatar', 'rating', $rating = trim($_POST['rating'] ?? 'g'));
 }

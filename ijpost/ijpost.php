@@ -8,11 +8,14 @@
  * Author: Cat Gray <https://free-haven.org/profile/catness>
  */
 
+use Friendica\App;
 use Friendica\Content\Text\BBCode;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 use Friendica\Model\Tag;
+use Friendica\Model\User;
 use Friendica\Util\DateTimeFormat;
 use Friendica\Util\XML;
 
@@ -25,91 +28,62 @@ function ijpost_install()
 	Hook::register('connector_settings_post', 'addon/ijpost/ijpost.php', 'ijpost_settings_post');
 }
 
-function ijpost_jot_nets(\Friendica\App &$a, array &$jotnets_fields)
+function ijpost_jot_nets(array &$jotnets_fields)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	if (DI::pConfig()->get(local_user(), 'ijpost', 'post')) {
+	if (DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'post')) {
 		$jotnets_fields[] = [
 			'type' => 'checkbox',
 			'field' => [
 				'ijpost_enable',
 				DI::l10n()->t('Post to Insanejournal'),
-				DI::pConfig()->get(local_user(), 'ijpost', 'post_by_default')
+				DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'post_by_default')
 			]
 		];
 	}
 }
 
-function ijpost_settings(&$a, &$s)
+function ijpost_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
+	$enabled     = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'post', false);
+	$ij_username = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'ij_username');
+	$def_enabled = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'post_by_default');
 
-	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/ijpost/ijpost.css' . '" media="all" />' . "\r\n";
+	$t    = Renderer::getMarkupTemplate('connector_settings.tpl', 'addon/ijpost/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled'   => ['ijpost', DI::l10n()->t('Enable InsaneJournal Post Addon'), $enabled],
+		'$username'  => ['ij_username', DI::l10n()->t('InsaneJournal username'), $ij_username],
+		'$password'  => ['ij_password', DI::l10n()->t('InsaneJournal password')],
+		'$bydefault' => ['ij_bydefault', DI::l10n()->t('Post to InsaneJournal by default'), $def_enabled],
+	]);
 
-	/* Get the current state of our config variables */
-
-	$enabled = DI::pConfig()->get(local_user(), 'ijpost', 'post');
-
-	$checked = (($enabled) ? ' checked="checked" ' : '');
-
-	$def_enabled = DI::pConfig()->get(local_user(), 'ijpost', 'post_by_default');
-
-	$def_checked = (($def_enabled) ? ' checked="checked" ' : '');
-
-	$ij_username = DI::pConfig()->get(local_user(), 'ijpost', 'ij_username');
-	$ij_password = DI::pConfig()->get(local_user(), 'ijpost', 'ij_password');
-
-	/* Add some HTML to the existing form */
-	$s .= '<span id="settings_ijpost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_ijpost_expanded\'); openClose(\'settings_ijpost_inflated\');">';
-	$s .= '<img class="connector" src="images/insanejournal.gif" /><h3 class="connector">'. DI::l10n()->t("InsaneJournal Export").'</h3>';
-	$s .= '</span>';
-	$s .= '<div id="settings_ijpost_expanded" class="settings-block" style="display: none;">';
-	$s .= '<span class="fakelink" onclick="openClose(\'settings_ijpost_expanded\'); openClose(\'settings_ijpost_inflated\');">';
-	$s .= '<img class="connector" src="images/insanejournal.gif" /><h3 class="connector">'. DI::l10n()->t("InsaneJournal Export").'</h3>';
-	$s .= '</span>';
-
-	$s .= '<div id="ijpost-enable-wrapper">';
-	$s .= '<label id="ijpost-enable-label" for="ijpost-checkbox">' . DI::l10n()->t('Enable InsaneJournal Post Addon') . '</label>';
-	$s .= '<input id="ijpost-checkbox" type="checkbox" name="ijpost" value="1" ' . $checked . '/>';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div id="ijpost-username-wrapper">';
-	$s .= '<label id="ijpost-username-label" for="ijpost-username">' . DI::l10n()->t('InsaneJournal username') . '</label>';
-	$s .= '<input id="ijpost-username" type="text" name="ij_username" value="' . $ij_username . '" />';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div id="ijpost-password-wrapper">';
-	$s .= '<label id="ijpost-password-label" for="ijpost-password">' . DI::l10n()->t('InsaneJournal password') . '</label>';
-	$s .= '<input id="ijpost-password" type="password" name="ij_password" value="' . $ij_password . '" />';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div id="ijpost-bydefault-wrapper">';
-	$s .= '<label id="ijpost-bydefault-label" for="ijpost-bydefault">' . DI::l10n()->t('Post to InsaneJournal by default') . '</label>';
-	$s .= '<input id="ijpost-bydefault" type="checkbox" name="ij_bydefault" value="1" ' . $def_checked . '/>';
-	$s .= '</div><div class="clear"></div>';
-
-	/* provide a submit button */
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="ijpost-submit" name="ijpost-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div></div>';
+	$data = [
+		'connector' => 'ijpost',
+		'title'     => DI::l10n()->t('InsaneJournal Export'),
+		'image'     => 'images/insanejournal.gif',
+		'enabled'   => $enabled,
+		'html'      => $html,
+	];
 }
 
-function ijpost_settings_post(&$a, &$b)
+function ijpost_settings_post(array &$b)
 {
 	if (!empty($_POST['ijpost-submit'])) {
-		DI::pConfig()->set(local_user(), 'ijpost', 'post', intval($_POST['ijpost']));
-		DI::pConfig()->set(local_user(), 'ijpost', 'post_by_default', intval($_POST['ij_bydefault']));
-		DI::pConfig()->set(local_user(), 'ijpost', 'ij_username', trim($_POST['ij_username']));
-		DI::pConfig()->set(local_user(), 'ijpost', 'ij_password', trim($_POST['ij_password']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'ijpost', 'post', intval($_POST['ijpost']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'ijpost', 'post_by_default', intval($_POST['ij_bydefault']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'ijpost', 'ij_username', trim($_POST['ij_username']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'ijpost', 'ij_password', trim($_POST['ij_password']));
 	}
 }
 
-function ijpost_post_local(&$a, &$b)
+function ijpost_post_local(array &$b)
 {
 	// This can probably be changed to allow editing by pointing to a different API endpoint
 
@@ -117,7 +91,7 @@ function ijpost_post_local(&$a, &$b)
 		return;
 	}
 
-	if (!local_user() || (local_user() != $b['uid'])) {
+	if (!DI::userSession()->getLocalUserId() || (DI::userSession()->getLocalUserId() != $b['uid'])) {
 		return;
 	}
 
@@ -125,11 +99,11 @@ function ijpost_post_local(&$a, &$b)
 		return;
 	}
 
-	$ij_post   = intval(DI::pConfig()->get(local_user(), 'ijpost', 'post'));
+	$ij_post   = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'post'));
 
 	$ij_enable = (($ij_post && !empty($_REQUEST['ijpost_enable'])) ? intval($_REQUEST['ijpost_enable']) : 0);
 
-	if ($b['api_source'] && intval(DI::pConfig()->get(local_user(), 'ijpost', 'post_by_default'))) {
+	if ($b['api_source'] && intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ijpost', 'post_by_default'))) {
 		$ij_enable = 1;
 	}
 
@@ -144,7 +118,7 @@ function ijpost_post_local(&$a, &$b)
 	$b['postopts'] .= 'ijpost';
 }
 
-function ijpost_send(&$a, &$b)
+function ijpost_send(array &$b)
 {
 	if ($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited'])) {
 		return;
@@ -162,15 +136,8 @@ function ijpost_send(&$a, &$b)
 	// Hopefully the person's Friendica account
 	// will be set to the same thing.
 
-	$tz = 'UTC';
-
-	$x = q("select timezone from user where uid = %d limit 1",
-		intval($b['uid'])
-	);
-
-	if ($x && strlen($x[0]['timezone'])) {
-		$tz = $x[0]['timezone'];
-	}
+	$user = User::getById($b['uid']);
+	$tz = $user['timezone'] ?: 'UTC';
 
 	$ij_username = DI::pConfig()->get($b['uid'], 'ijpost', 'ij_username');
 	$ij_password = DI::pConfig()->get($b['uid'], 'ijpost', 'ij_password');
@@ -178,7 +145,7 @@ function ijpost_send(&$a, &$b)
 
 	if ($ij_username && $ij_password && $ij_blog) {
 		$title = $b['title'];
-		$post = BBCode::convert($b['body']);
+		$post = BBCode::convertForUriId($b['uri-id'], $b['body'], BBCode::CONNECTORS);
 		$post = XML::escape($post);
 		$tags = Tag::getCSVByURIId($b['uri-id'], [Tag::HASHTAG]);
 
@@ -216,11 +183,11 @@ function ijpost_send(&$a, &$b)
 
 EOT;
 
-		Logger::log('ijpost: data: ' . $xml, Logger::DATA);
+		Logger::debug('ijpost: data: ' . $xml);
 
 		if ($ij_blog !== 'test') {
-			$x = DI::httpRequest()->post($ij_blog, $xml, ["Content-Type: text/xml"])->getBody();
+			$x = DI::httpClient()->post($ij_blog, $xml, ['Content-Type' => 'text/xml'])->getBody();
 		}
-		Logger::log('posted to insanejournal: ' . $x ? $x : '', Logger::DEBUG);
+		Logger::info('posted to insanejournal: ' . $x ? $x : '');
 	}
 }

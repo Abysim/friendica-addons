@@ -4,14 +4,15 @@
 # 
 # 
 # Translators:
-# Waldemar Stoczkowski <waldemar.stoczkowski@gmail.com>, 2018
+# Piotr Strębski <strebski@gmail.com>, 2022
+# Waldemar Stoczkowski, 2018
 msgid ""
 msgstr ""
 "Project-Id-Version: friendica\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2013-02-27 05:01-0500\n"
-"PO-Revision-Date: 2018-08-04 10:52+0000\n"
-"Last-Translator: Waldemar Stoczkowski <waldemar.stoczkowski@gmail.com>\n"
+"POT-Creation-Date: 2021-02-01 18:15+0100\n"
+"PO-Revision-Date: 2014-06-23 11:01+0000\n"
+"Last-Translator: Piotr Strębski <strebski@gmail.com>, 2022\n"
 "Language-Team: Polish (http://www.transifex.com/Friendica/friendica/language/pl/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -19,28 +20,47 @@ msgstr ""
 "Language: pl\n"
 "Plural-Forms: nplurals=4; plural=(n==1 ? 0 : (n%10>=2 && n%10<=4) && (n%100<12 || n%100>14) ? 1 : n!=1 && (n%10>=0 && n%10<=1) || (n%10>=5 && n%10<=9) || (n%100>=12 && n%100<=14) ? 2 : 3);\n"
 
-#: openstreetmap.php:94
+#: openstreetmap.php:167
+msgid "View Larger"
+msgstr "Zobacz większą"
+
+#: openstreetmap.php:194
 msgid "Submit"
 msgstr "Zatwierdź"
 
-#: openstreetmap.php:95
+#: openstreetmap.php:195
 msgid "Tile Server URL"
-msgstr "Adres URL serwera sąsiadująco"
+msgstr "Adres URL serwera kafelków"
 
-#: openstreetmap.php:95
+#: openstreetmap.php:195
 msgid ""
 "A list of <a href=\"http://wiki.openstreetmap.org/wiki/TMS\" "
-"target=\"_blank\">public tile servers</a>"
-msgstr "Lista <a href=\"http://wiki.openstreetmap.org/wiki/TMS\" target=\"_blank\">serwerów publicznych</a>"
+"target=\"_blank\" rel=\"noopener noreferrer\">public tile servers</a>"
+msgstr "Lista <a href=\"http://wiki.openstreetmap.org/wiki/TMS\" target=\"_blank\" rel=\"noopener noreferrer\">publicznych serwerów z kafelkami</a>"
 
-#: openstreetmap.php:96
+#: openstreetmap.php:196
+msgid "Nominatim (reverse geocoding) Server URL"
+msgstr "Adres URL serwera Nominatim (geokodowanie odwrotne)"
+
+#: openstreetmap.php:196
+msgid ""
+"A list of <a href=\"http://wiki.openstreetmap.org/wiki/Nominatim\" "
+"target=\"_blank\" rel=\"noopener noreferrer\">Nominatim servers</a>"
+msgstr "Lista <a href=\"http://wiki.openstreetmap.org/wiki/Nominatim\" target=\"_blank\" rel=\"noopener noreferrer\">serwerów Nominatim</a>"
+
+#: openstreetmap.php:197
 msgid "Default zoom"
 msgstr "Domyślne powiększenie"
 
-#: openstreetmap.php:96
-msgid "The default zoom level. (1:world, 18:highest)"
-msgstr "Domyślny poziom powiększenia. (1:świat, 18:najwyższy)"
+#: openstreetmap.php:197
+msgid ""
+"The default zoom level. (1:world, 18:highest, also depends on tile server)"
+msgstr "Domyślny poziom powiększenia. (1:świat, 18:największy; zależy to także od serwera kafelków)"
 
-#: openstreetmap.php:104
-msgid "Settings updated."
-msgstr "Zaktualizowano ustawienia."
+#: openstreetmap.php:198
+msgid "Include marker on map"
+msgstr "Uwzględnij znacznik na mapie"
+
+#: openstreetmap.php:198
+msgid "Include a marker on the map."
+msgstr "Uwzględnij znacznik na mapie."

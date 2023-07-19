@@ -6,35 +6,35 @@
  * Author: Tobias Diekershoff <https://f.diekershoff.de/profile/tobias>
  ***/
 
+use Friendica\App;
 use Friendica\Content\Text\BBCode;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\DI;
-use Friendica\Util\Strings;
 
 function newmemberwidget_install()
 {
 	Hook::register( 'network_mod_init', 'addon/newmemberwidget/newmemberwidget.php', 'newmemberwidget_network_mod_init');
-	Logger::log('newmemberwidget installed');
+	Logger::notice('newmemberwidget installed');
 }
 
-function newmemberwidget_network_mod_init ($a, $b)
+function newmemberwidget_network_mod_init ($b)
 {
 	if (empty($_SESSION['new_member'])) {
 		return;
 	}
 
-	$t = '<div id="newmember_widget" class="widget">'.EOL;
-	$t .= '<h3>'.DI::l10n()->t('New Member').'</h3>'.EOL;
-	$t .= '<a href="newmember" id="newmemberwidget-tips">' . DI::l10n()->t('Tips for New Members') . '</a><br />'.EOL;
+	$t = '<div id="newmember_widget" class="widget">';
+	$t .= '<h3>'.DI::l10n()->t('New Member').'</h3>';
+	$t .= '<a href="newmember" id="newmemberwidget-tips">' . DI::l10n()->t('Tips for New Members') . '</a><br />';
 
 	if (DI::config()->get('newmemberwidget','linkglobalsupport', false)) {
-		$t .= '<a href="https://forum.friendi.ca/profile/helpers" target="_new">'.DI::l10n()->t('Global Support Forum').'</a><br />'.EOL;
+		$t .= '<a href="https://forum.friendi.ca/profile/helpers" target="_new">'.DI::l10n()->t('Global Support Forum').'</a><br />';
 	}
 
 	if (DI::config()->get('newmemberwidget','linklocalsupport', false)) {
-		$t .= '<a href="'.DI::baseUrl()->get().'/profile/'.DI::config()->get('newmemberwidget','localsupport').'" target="_new">'.DI::l10n()->t('Local Support Forum').'</a><br />'.EOL;
+		$t .= '<a href="'.DI::baseUrl().'/profile/'.DI::config()->get('newmemberwidget','localsupport').'" target="_new">'.DI::l10n()->t('Local Support Forum').'</a><br />';
 	}
 
 	$ft = DI::config()->get('newmemberwidget','freetext', '');
@@ -46,26 +46,23 @@ function newmemberwidget_network_mod_init ($a, $b)
 	DI::page()['aside'] = $t . DI::page()['aside'];
 }
 
-function newmemberwidget_addon_admin_post(&$a)
+function newmemberwidget_addon_admin_post()
 {
-	$ft = (!empty($_POST['freetext']) ? trim($_POST['freetext']) : "");
-	$lsn = (!empty($_POST['localsupportname']) ? Strings::escapeTags(trim($_POST['localsupportname'])) : "");
-	$gs = intval($_POST['linkglobalsupport']);
-	$ls = intval($_POST['linklocalsupport']);
-	DI::config()->set('newmemberwidget', 'freetext',           trim($ft));
-	DI::config()->set('newmemberwidget', 'linkglobalsupport',  $gs);
-	DI::config()->set('newmemberwidget', 'linklocalsupport',   $ls);
-	DI::config()->set('newmemberwidget', 'localsupport',       trim($lsn));
+	DI::config()->set('newmemberwidget', 'freetext',           (!empty($_POST['freetext']) ? trim($_POST['freetext']) : ""));
+	DI::config()->set('newmemberwidget', 'linkglobalsupport',  intval($_POST['linkglobalsupport']));
+	DI::config()->set('newmemberwidget', 'linklocalsupport',   intval($_POST['linklocalsupport']));
+	DI::config()->set('newmemberwidget', 'localsupport',       trim($_POST['localsupportname'] ?? ''));
 }
 
-function newmemberwidget_addon_admin(&$a, &$o)
+function newmemberwidget_addon_admin(string &$o)
 {
 	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/newmemberwidget');
+
 	$o = Renderer::replaceMacros($t, [
-	'$submit' => DI::l10n()->t('Save Settings'),
-	'$freetext' => [ "freetext", DI::l10n()->t("Message"), DI::config()->get("newmemberwidget", "freetext"), DI::l10n()->t("Your message for new members. You can use bbcode here.")],
-	'$linkglobalsupport' => [ "linkglobalsupport", DI::l10n()->t('Add a link to global support forum'), DI::config()->get('newmemberwidget', 'linkglobalsupport'), DI::l10n()->t('Should a link to the global support forum be displayed?')." (<a href='https://forum.friendi.ca/profile/helpers'>@helpers</a>)"],
-	'$linklocalsupport' => [ "linklocalsupport", DI::l10n()->t('Add a link to the local support forum'), DI::config()->get('newmemberwidget', 'linklocalsupport'), DI::l10n()->t('If you have a local support forum and want to have a link displayed in the widget, check this box.')],
-	'$localsupportname' => [ "localsupportname", DI::l10n()->t('Name of the local support group'), DI::config()->get('newmemberwidget', 'localsupport'), DI::l10n()->t('If you checked the above, specify the <em>nickname</em> of the local support group here (i.e. helpers)')],
+		'$submit' => DI::l10n()->t('Save Settings'),
+		'$freetext' => ["freetext", DI::l10n()->t("Message"), DI::config()->get("newmemberwidget", "freetext"), DI::l10n()->t("Your message for new members. You can use bbcode here.")],
+		'$linkglobalsupport' => ["linkglobalsupport", DI::l10n()->t('Add a link to global support forum'), DI::config()->get('newmemberwidget', 'linkglobalsupport'), DI::l10n()->t('Should a link to the global support forum be displayed?')." (<a href='https://forum.friendi.ca/profile/helpers'>@helpers</a>)"],
+		'$linklocalsupport' => ["linklocalsupport", DI::l10n()->t('Add a link to the local support forum'), DI::config()->get('newmemberwidget', 'linklocalsupport'), DI::l10n()->t('If you have a local support forum and want to have a link displayed in the widget, check this box.')],
+		'$localsupportname' => ["localsupportname", DI::l10n()->t('Name of the local support group'), DI::config()->get('newmemberwidget', 'localsupport'), DI::l10n()->t('If you checked the above, specify the <em>nickname</em> of the local support group here (i.e. helpers)')],
 	]);
 }

@@ -4,42 +4,45 @@
  * Description: The TicTacToe game application
  * Version: 1.0
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
+ * Status: unsupported
  */
+
+use Friendica\App;
 use Friendica\Core\Hook;
 use Friendica\DI;
 
-function tictac_install() {
+function tictac_install()
+{
 	Hook::register('app_menu', 'addon/tictac/tictac.php', 'tictac_app_menu');
 }
 
-function tictac_app_menu($a,&$b) {
+function tictac_app_menu(array &$b)
+{
 	$b['app_menu'][] = '<div class="app-title"><a href="tictac">' . DI::l10n()->t('Three Dimensional Tic-Tac-Toe') . '</a></div>';
 }
 
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
+function tictac_module() {}
 
-function tictac_module() {
-	return;
-}
-
-
-
-
-
-function tictac_content(&$a) {
+function tictac_content() {
 
 	$o = '';
 
   if($_POST['move']) {
-    $handicap = $a->argv[1];
-    $mefirst = $a->argv[2];
-    $dimen = $a->argv[3];
-    $yours = $a->argv[4];
-    $mine  = $a->argv[5];
+    $handicap = DI::args()->get(1);
+    $mefirst = DI::args()->get(2);
+    $dimen = DI::args()->get(3);
+    $yours = DI::args()->get(4);
+    $mine  = DI::args()->get(5);
 
     $yours .= $_POST['move'];
   }
-  elseif($a->argc > 1) {
-    $handicap = $a->argv[1];
+  elseif(DI::args()->getArgc() > 1) {
+    $handicap = DI::args()->get(1);
     $dimen = 3;
   }
   else {

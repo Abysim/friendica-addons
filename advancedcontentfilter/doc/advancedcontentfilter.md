@@ -36,10 +36,10 @@ A post will be collapsed if at least one rule matches, but all matching rule nam
 
 ## Examples
 
-1. To block specific domains `body matches "/\\.example\\.com/"`
-2. To block everything that contains the words `body matches "/Guten Morgen/"`
-3. To block every occurence of the word facebook with a space in front and after the word `body matches "//s facebook/s /"`
-4. To colapse every post that contains more than 1 image `body matches "/(?:(?:(?:\\[url(?:=.*)?\\])?\\[img(?:=.*)?\\].*\\[\\/img\\]\\s*(?:\\[\\/url\\])?)\\s*){2}/"`
+1. Collapse posts with specific domains `body matches "/\\.example\\.com/"`
+2. Collapse posts that contains the words `body matches "/Guten Morgen/"`
+3. Collapse posts with the word facebook that have a space in front and after the word `body matches "//s facebook/s /"`
+4. Collapse posts that contains more than 1 image `body matches "/(?:(?:(?:\\[url(?:=.*)?\\])?\\[img(?:=.*)?\\].*\\[\\/img\\]\\s*(?:\\[\\/url\\])?)\\s*){2}/"`
 
 
 ## Expression Syntax
@@ -456,11 +456,6 @@ You can also retrieve the variables of a specific post by pasting its URL below 
 	<tr>
 		<th>event_nofinish</th>
 		<td>string</td>
-		<td>null</td>
-	</tr>
-	<tr>
-		<th>event_adjust</th>
-		<td>boolean</td>
 		<td>null</td>
 	</tr>
 	<tr>

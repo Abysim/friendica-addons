@@ -8,6 +8,10 @@
       <file>tests/suite.php</file>
     </testsuite>
 
+    <testsuite name="Signature">
+      <file>tests/suite.php</file>
+    </testsuite>
+
     <testsuite name="MessageVerification">
       <file>tests/phpseclib_suite.php</file>
     </testsuite>
@@ -22,6 +26,10 @@
 
     <testsuite name="Encryption">
       <file>tests/phpseclib_suite.php</file>
+    </testsuite>
+
+    <testsuite name="SodiumMessageVerification">
+      <file>tests/sodium_suite.php</file>
     </testsuite>
   </testsuites>
 </phpunit>

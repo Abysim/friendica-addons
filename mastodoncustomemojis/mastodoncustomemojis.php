@@ -11,7 +11,7 @@
 
 use Friendica\App;
 use Friendica\Content\Smilies;
-use Friendica\Core\Cache\Duration;
+use Friendica\Core\Cache\Enum\Duration;
 use Friendica\Core\Hook;
 use Friendica\Core\Protocol;
 use Friendica\DI;
@@ -27,7 +27,7 @@ function mastodoncustomemojis_install()
 	Hook::register('contacts_mod_init',  __FILE__, 'mastodoncustomemojis_css_hook');
 }
 
-function mastodoncustomemojis_css_hook(App $a)
+function mastodoncustomemojis_css_hook()
 {
 	DI::page()['htmlhead'] .= <<<HTML
 <!-- Style added by mastodoncustomemojis -->
@@ -42,7 +42,7 @@ function mastodoncustomemojis_css_hook(App $a)
 HTML;
 }
 
-function mastodoncustomemojis_put_item_in_cache(App $a, array &$hook_data)
+function mastodoncustomemojis_put_item_in_cache(array &$hook_data)
 {
 	// Mastodon uses OStatus and ActivityPub, skipping other network protocols
 	if (empty($hook_data['item']['author-link']) || !in_array($hook_data['item']['network'], [Protocol::OSTATUS, Protocol::ACTIVITYPUB])) {
@@ -79,7 +79,7 @@ function mastodoncustomemojis_fetch_custom_emojis_for_url($api_base_url)
 
 	$api_url = $api_base_url . '/api/v1/custom_emojis';
 
-	$fetchResult = DI::httpRequest()->fetchFull($api_url);
+	$fetchResult = DI::httpClient()->fetchFull($api_url);
 
 	if ($fetchResult->isSuccess()) {
 		$emojis_array = json_decode($fetchResult->getBody(), true);

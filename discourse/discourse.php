@@ -36,32 +36,38 @@ function discourse_install()
 	Hook::register('connector_settings_post', __FILE__, 'discourse_settings_post');
 }
 
-function discourse_settings(App $a, &$s)
+function discourse_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$enabled = intval(DI::pConfig()->get(local_user(), 'discourse', 'enabled'));
+	$enabled = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'discourse', 'enabled'));
 
-	$t = Renderer::getMarkupTemplate('settings.tpl', 'addon/discourse/');
-	$s .= Renderer::replaceMacros($t, [
-		'$title'   => DI::l10n()->t('Discourse'),
+	$t    = Renderer::getMarkupTemplate('connector_settings.tpl', 'addon/discourse/');
+	$html = Renderer::replaceMacros($t, [
 		'$enabled' => ['enabled', DI::l10n()->t('Enable processing of Discourse mailing list mails'), $enabled, DI::l10n()->t('If enabled, incoming mails from Discourse will be improved so they look much better. To make it work, you have to configure the e-mail settings in Friendica. You also have to enable the mailing list mode in Discourse. Then you have to add the Discourse mail account as contact.')],
-		'$submit'  => DI::l10n()->t('Save Settings'),
 	]);
+
+	$data = [
+		'connector' => 'discourse',
+		'title'     => DI::l10n()->t('Discourse'),
+		'image'     => 'images/discourse.png',
+		'enabled'   => $enabled,
+		'html'      => $html,
+	];
 }
 
-function discourse_settings_post(App $a)
+function discourse_settings_post()
 {
-	if (!local_user() || empty($_POST['discourse-submit'])) {
+	if (!DI::userSession()->getLocalUserId() || empty($_POST['discourse-submit'])) {
                 return;
         }
 
-	DI::pConfig()->set(local_user(), 'discourse', 'enabled', intval($_POST['enabled']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'discourse', 'enabled', intval($_POST['enabled']));
 }
 
-function discourse_email_getmessage(App $a, &$message)
+function discourse_email_getmessage(&$message)
 {
 	if (empty($message['item']['uid'])) {
 		return;
@@ -106,7 +112,7 @@ function discourse_email_getmessage(App $a, &$message)
 	}
 
 	// Remove the title on comments, they don't serve any purpose there
-	if ($message['item']['parent-uri'] != $message['item']['uri']) {
+	if ($message['item']['thr-parent'] != $message['item']['uri']) {
 		unset($message['item']['title']);
 	}
 }
@@ -114,7 +120,7 @@ function discourse_email_getmessage(App $a, &$message)
 function discourse_fetch_post($host, $topic, $pid)
 {
 	$url = $host . '/t/' . $topic . '/' . $pid . '.json';
-	$curlResult = DI::httpRequest()->get($url);
+	$curlResult = DI::httpClient()->get($url);
 	if (!$curlResult->isSuccess()) {
 		Logger::info('No success', ['url' => $url]);
 		return false;
@@ -151,7 +157,7 @@ function discourse_fetch_post_from_api(&$message, $post, $host)
 {
 	$hostaddr = 'https://' . $host;
 	$url = $hostaddr . '/posts/' . $post . '.json';
-	$curlResult = DI::httpRequest()->get($url);
+	$curlResult = DI::httpClient()->get($url);
 	if (!$curlResult->isSuccess()) {
 		return false;
 	}

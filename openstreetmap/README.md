@@ -34,22 +34,25 @@ zoom level available.
 
 ## Alternative Configuration
 
-Open the `config/local.config.php` file and add "openstreetmap" to the list of activated addons.
+Open the `config/node.config.php` file and add "openstreetmap" to the list of activated addons.
 
-     'system' => [
-         ...
-         'addon' => '...,openstreetmap'
-         ...
-     ]
+	'addons' => [
+		...
+		'openstreetmap' => [
+			admin => true,			
+		],
+	]
 
-You can set configuration variables for the addon in the `config/addon.config.php` file:
+You can set configuration variables for the addon in the `config/openstreetmap.config.php` file:
 
-	'openstreetmap' => [
-		'tmsserver' => 'https://www.openstreetmap.org',
-		'nomserver' => 'https://nominatim.openstreetmap.org/search.php',
-		'zoom' => 16,
-		'marker' => 0,
-	],
+	return [
+		'openstreetmap' => [
+			'tmsserver' => 'https://www.openstreetmap.org',
+			'nomserver' => 'https://nominatim.openstreetmap.org/search.php',
+			'zoom' => 16,
+			'marker' => 0,
+		],
+	];
 
 The *tmsserver* points to the tile server you want to use. Use the full URL,
 with protocol (http/s) and trailing slash. You can configure the default zoom

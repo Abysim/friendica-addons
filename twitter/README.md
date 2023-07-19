@@ -18,18 +18,21 @@ After the registration please enter the values for "Consumer Key" and "Consumer 
 
 Open the `config/local.config.php` file and add "twitter" to the list of activated addons:
 
-    'system' => [
-        ...
-        'addon' => '...,twitter'
-        ...
-    ]
+	'addons' => [
+		...
+		'twitter' => [
+			admin => true,			
+		],
+	]
 
-Add your key pair to your global `config/addon.config.php`.
+Add your key pair to your `config/twitter.config.php` file.
 
-	'twitter' => [
-		'consumerkey' => 'your consumer_key here',
-		'consumersecret' => 'your consumer_secret here',
-	],
+	return [
+		'twitter' => [
+			'consumerkey' => 'your consumer_key here',
+			'consumersecret' => 'your consumer_secret here',
+		],
+	];
 
 After this, users can configure their Twitter account settings from "Settings -> Addon Settings".
 

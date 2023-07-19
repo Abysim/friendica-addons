@@ -1,0 +1,31 @@
+#profile-smiley-wrapper {
+	display: block;
+}
+
+#smileybutton {
+	display: none;
+}
+
+.smiley_button > img {
+	height: 14px;
+	width: 14px;
+}
+
+table.smiley-preview img.smiley {
+	max-height: 25px;
+	max-width: 25px;
+}
+
+table.smiley-preview {
+	border: 1px solid #AAAAAA;
+}
+
+table.smiley-preview td {
+	cursor: pointer;
+}
+
+#profile-smiley-wrapper > .btn-link {
+	position: relative;
+	display: block;
+	padding: 10px 15px;
+}

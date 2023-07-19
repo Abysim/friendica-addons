@@ -12,8 +12,7 @@ use Friendica\Core\Hook;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\DI;
-use Friendica\Util\ConfigFileLoader;
-use Friendica\Util\Strings;
+use Friendica\Core\Config\Util\ConfigFileManager;
 
 /**
  * Installs the addon hook
@@ -25,18 +24,17 @@ function libravatar_install()
 	Logger::notice("registered libravatar in avatar_lookup hook");
 }
 
-function libravatar_load_config(App $a, ConfigFileLoader $loader)
+function libravatar_load_config(ConfigFileManager $loader)
 {
-	$a->getConfigCache()->load($loader->loadAddonConfig('libravatar'));
+	DI::app()->getConfigCache()->load($loader->loadAddonConfig('libravatar'), \Friendica\Core\Config\ValueObject\Cache::SOURCE_STATIC);
 }
 
 /**
  * Looks up the avatar at Libravatar and returns the URL.
  *
- * @param $a array
  * @param &$b array
  */
-function libravatar_lookup($a, &$b)
+function libravatar_lookup(array &$b)
 {
 	$default_avatar = DI::config()->get('libravatar', 'default_avatar');
 	if (empty($default_avatar)) {
@@ -45,6 +43,7 @@ function libravatar_lookup($a, &$b)
 	}
 
 	require_once 'Services/Libravatar.php';
+
 	$libravatar = new Services_Libravatar();
 	$libravatar->setSize($b['size']);
 	$libravatar->setDefault($default_avatar);
@@ -57,9 +56,9 @@ function libravatar_lookup($a, &$b)
 /**
  * Display admin settings for this addon
  */
-function libravatar_addon_admin(&$a, &$o)
+function libravatar_addon_admin(string &$o)
 {
-	$t = Renderer::getMarkupTemplate("admin.tpl", "addon/libravatar");
+	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/libravatar');
 
 	$default_avatar = DI::config()->get('libravatar', 'default_avatar', 'identicon');
 
@@ -88,8 +87,7 @@ function libravatar_addon_admin(&$a, &$o)
 /**
  * Save admin settings
  */
-function libravatar_addon_admin_post(&$a)
+function libravatar_addon_admin_post()
 {
-	$default_avatar = (!empty($_POST['avatar']) ? Strings::escapeTags(trim($_POST['avatar'])) : 'identicon');
-	DI::config()->set('libravatar', 'default_avatar', $default_avatar);
+	DI::config()->set('libravatar', 'default_avatar', trim($_POST['avatar'] ?? 'identicon'));
 }

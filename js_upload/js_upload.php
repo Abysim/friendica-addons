@@ -12,6 +12,10 @@ use Friendica\Core\Hook;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\DI;
+use Friendica\Util\Strings;
+
+global $js_upload_jsonresponse;
+global $js_upload_result;
 
 function js_upload_install()
 {
@@ -21,12 +25,12 @@ function js_upload_install()
 	Hook::register('photo_post_end', __FILE__, 'js_upload_post_end');
 }
 
-function js_upload_form(App $a, array &$b)
+function js_upload_form(array &$b)
 {
 	$b['default_upload'] = false;
 
-	DI::page()->registerStylesheet('addon/js_upload/file-uploader/client/fileuploader.css');
-	DI::page()->registerFooterScript('addon/js_upload/file-uploader/client/fileuploader.js');
+	DI::page()->registerStylesheet(__DIR__ . '/file-uploader/client/fileuploader.css');
+	DI::page()->registerFooterScript(__DIR__ . '/file-uploader/client/fileuploader.js');
 
 	$tpl = Renderer::getMarkupTemplate('js_upload.tpl', 'addon/js_upload');
 	$b['addon_text'] .= Renderer::replaceMacros($tpl, [
@@ -35,37 +39,41 @@ function js_upload_form(App $a, array &$b)
 		'$cancel' => DI::l10n()->t('Cancel'),
 		'$failed' => DI::l10n()->t('Failed'),
 		'$post_url' => $b['post_url'],
-		'$maximagesize' => intval(DI::config()->get('system', 'maximagesize')),
+		'$maximagesize' => Strings::getBytesFromShorthand(DI::config()->get('system', 'maximagesize')),
 	]);
 }
 
-function js_upload_post_init(App $a, &$b)
+function js_upload_post_init(array &$b)
 {
+	global $js_upload_result, $js_upload_jsonresponse;
+
 	// list of valid extensions
 	$allowedExtensions = ['jpeg', 'gif', 'png', 'jpg'];
 
 	// max file size in bytes
-	$sizeLimit = DI::config()->get('system', 'maximagesize');
+	$sizeLimit = Strings::getBytesFromShorthand(DI::config()->get('system', 'maximagesize'));
 
 	$uploader = new qqFileUploader($allowedExtensions, $sizeLimit);
 
 	$result = $uploader->handleUpload();
 
 	// to pass data through iframe you will need to encode all html tags
-	$a->data['upload_jsonresponse'] = htmlspecialchars(json_encode($result), ENT_NOQUOTES);
+	$js_upload_jsonresponse = htmlspecialchars(json_encode($result), ENT_NOQUOTES);
 
 	if (isset($result['error'])) {
-		Logger::log('mod/photos.php: photos_post(): error uploading photo: ' . $result['error'], Logger::DEBUG);
+		Logger::info('mod/photos.php: photos_post(): error uploading photo: ' . $result['error']);
 		echo json_encode($result);
 		exit();
 	}
 
-	$a->data['upload_result'] = $result;
+	$js_upload_result = $result;
 }
 
-function js_upload_post_file(App $a, &$b)
+function js_upload_post_file(array &$b)
 {
-	$result = $a->data['upload_result'];
+	global $js_upload_result;
+
+	$result = $js_upload_result;
 
 	$b['src'] = $result['path'];
 	$b['filename'] = $result['filename'];
@@ -73,11 +81,13 @@ function js_upload_post_file(App $a, &$b)
 
 }
 
-function js_upload_post_end(App $a, &$b)
+function js_upload_post_end(int &$b)
 {
-	Logger::log('upload_post_end');
-	if (!empty($a->data['upload_jsonresponse'])) {
-		echo $a->data['upload_jsonresponse'];
+	global $js_upload_jsonresponse;
+
+	Logger::notice('upload_post_end');
+	if (!empty($js_upload_jsonresponse)) {
+		echo $js_upload_jsonresponse;
 		exit();
 	}
 }
@@ -190,21 +200,6 @@ class qqFileUploader
 
 	}
 
-	private function toBytes($str)
-	{
-		$val = trim($str);
-		$last = strtolower($str[strlen($str) - 1]);
-		switch ($last) {
-			case 'g':
-				$val *= 1024;
-			case 'm':
-				$val *= 1024;
-			case 'k':
-				$val *= 1024;
-		}
-		return $val;
-	}
-
 	/**
 	 * Returns array('success'=>true) or array('error'=>'error message')
 	 */
@@ -226,11 +221,10 @@ class qqFileUploader
 //		}
 
 
-		$maximagesize = DI::config()->get('system', 'maximagesize');
+		$maximagesize = Strings::getBytesFromShorthand(DI::config()->get('system', 'maximagesize'));
 
 		if (($maximagesize) && ($size > $maximagesize)) {
-			return ['error' => DI::l10n()->t('Image exceeds size limit of ') . $maximagesize];
-
+			return ['error' => DI::l10n()->t('Image exceeds size limit of %s', Strings::formatBytes($maximagesize))];
 		}
 
 		$pathinfo = pathinfo($this->file->getName());
@@ -242,8 +236,7 @@ class qqFileUploader
 		$ext = $pathinfo['extension'] ?? '';
 
 		if ($this->allowedExtensions && !in_array(strtolower($ext), $this->allowedExtensions)) {
-			$these = implode(', ', $this->allowedExtensions);
-			return ['error' => DI::l10n()->t('File has an invalid extension, it should be one of ') . $these . '.'];
+			return ['error' => DI::l10n()->t('File has an invalid extension, it should be one of %s.', implode(', ', $this->allowedExtensions))];
 		}
 
 		if ($this->file->save()) {

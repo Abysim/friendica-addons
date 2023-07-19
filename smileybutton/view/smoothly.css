@@ -1,4 +1,12 @@
-img.smiley_button {
+#profile-smiley-wrapper {
+	display: block;
+}
+
+#smileybutton {
+	display: none;
+}
+
+.smiley_button > img {
 	height: 22px;
 	width: 22px;
 	position: relative;
@@ -8,9 +16,10 @@ img.smiley_button {
 	border-radius: 0px;
 }
 
-img.smiley_preview {
+table.smiley-preview img.smiley {
 	max-height: 25px;
 	max-width: 25px;
+	cursor: pointer;
 }
 
 table.smiley-preview {
@@ -18,4 +27,8 @@ table.smiley-preview {
 	-moz-border-radius: 5px;
 	border-radius: 5px;
 	margin: 5px;
+}
+
+table.smiley-preview td {
+	cursor: pointer;
 }

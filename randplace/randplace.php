@@ -18,79 +18,74 @@
  * system will call the name_uninstall() function.
  *
  */
+
+use Friendica\App;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 
-function randplace_install() {
-
-	/**
-	 *
+function randplace_install()
+{
+	/*
 	 * Our demo addon will attach in three places.
 	 * The first is just prior to storing a local post.
-	 *
 	 */
-
 	Hook::register('post_local', 'addon/randplace/randplace.php', 'randplace_post_hook');
 
-	/**
-	 *
+	/*
 	 * Then we'll attach into the addon settings page, and also the
 	 * settings post hook so that we can create and update
 	 * user preferences.
-	 *
 	 */
-
 	Hook::register('addon_settings', 'addon/randplace/randplace.php', 'randplace_settings');
 	Hook::register('addon_settings_post', 'addon/randplace/randplace.php', 'randplace_settings_post');
 
-	Logger::log("installed randplace");
+	Logger::notice("installed randplace");
 }
 
-
-function randplace_uninstall() {
-
-	/**
-	 *
+function randplace_uninstall()
+{
+	/*
 	 * This function should undo anything that was done in name_install()
 	 *
 	 * Except hooks, they are all unregistered automatically and don't need to be unregistered manually.
-	 *
 	 */
-
-	Logger::log("removed randplace");
+	Logger::notice("removed randplace");
 }
 
-
-
-function randplace_post_hook($a, &$item) {
-
-	/**
-	 *
+function randplace_post_hook(&$item)
+{
+	/*
 	 * An item was posted on the local system.
 	 * We are going to look for specific items:
 	 *      - A status post by a profile owner
 	 *      - The profile owner must have allowed our addon
-	 *
 	 */
+	Logger::notice('randplace invoked');
 
-	Logger::log('randplace invoked');
-
-	if(! local_user())   /* non-zero if this is a logged in user of this system */
+	if (!DI::userSession()->getLocalUserId()) {
+		/* non-zero if this is a logged in user of this system */
 		return;
+	}
 
-	if(local_user() != $item['uid'])    /* Does this person own the post? */
+	if (DI::userSession()->getLocalUserId() != $item['uid']) {
+		/* Does this person own the post? */
 		return;
+	}
 
-	if($item['parent'])   /* If the item has a parent, this is a comment or something else, not a status post. */
+	if ($item['parent']) {
+		/* If the item has a parent, this is a comment or something else, not a status post. */
 		return;
+	}
 
 	/* Retrieve our personal config setting */
 
-	$active = DI::pConfig()->get(local_user(), 'randplace', 'enable');
+	$active = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'randplace', 'enable');
 
-	if(! $active)
+	if (!$active) {
 		return;
+	}
 
 	/**
 	 *
@@ -104,73 +99,59 @@ function randplace_post_hook($a, &$item) {
 	$cities = [];
 	$zones = timezone_identifiers_list();
 	foreach($zones as $zone) {
-		if((strpos($zone,'/')) && (! stristr($zone,'US/')) && (! stristr($zone,'Etc/')))
-			$cities[] = str_replace('_', ' ',substr($zone,strpos($zone,'/') + 1));
+		if ((strpos($zone, '/')) && (! stristr($zone, 'US/')) && (! stristr($zone, 'Etc/'))) {
+			$cities[] = str_replace('_', ' ',substr($zone, strpos($zone, '/') + 1));
+		}
 	}
 
-	if(! count($cities))
+	if (!count($cities)) {
 		return;
+	}
+
 	$city = array_rand($cities,1);
 	$item['location'] = $cities[$city];
 
 	return;
 }
 
-
-
-
 /**
- *
  * Callback from the settings post function.
  * $post contains the $_POST array.
  * We will make sure we've got a valid user account
  * and if so set our configuration setting for this person.
- *
  */
-
-function randplace_settings_post($a,$post) {
-	if(! local_user())
+function randplace_settings_post($post)
+{
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
-	if($_POST['randplace-submit'])
-		DI::pConfig()->set(local_user(),'randplace','enable',intval($_POST['randplace']));
+	}
+
+	if ($_POST['randplace-submit']) {
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'randplace', 'enable', intval($_POST['randplace']));
+	}
 }
 
 
 /**
- *
  * Called from the Addon Setting form.
  * Add our own settings info to the page.
- *
  */
-
-
-
-function randplace_settings(&$a,&$s) {
-
-	if(! local_user())
+function randplace_settings(array &$data)
+{
+	if(!DI::userSession()->getLocalUserId()) {
 		return;
+	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
+	$enabled = DI::pConfig()->get(DI::userSession()->getLocalUserId(),'randplace','enable');
 
-	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/randplace/randplace.css' . '" media="all" />' . "\r\n";
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/randplace/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled' => ['randplace', DI::l10n()->t('Enable Randplace Addon'), $enabled],
+	]);
 
-	/* Get the current state of our config variable */
-
-	$enabled = DI::pConfig()->get(local_user(),'randplace','enable');
-
-	$checked = (($enabled) ? ' checked="checked" ' : '');
-
-	/* Add some HTML to the existing form */
-
-	$s .= '<div class="settings-block">';
-	$s .= '<h3>' . DI::l10n()->t('Randplace Settings') . '</h3>';
-	$s .= '<div id="randplace-enable-wrapper">';
-	$s .= '<label id="randplace-enable-label" for="randplace-checkbox">' . DI::l10n()->t('Enable Randplace Addon') . '</label>';
-	$s .= '<input id="randplace-checkbox" type="checkbox" name="randplace" value="1" ' . $checked . '/>';
-	$s .= '</div><div class="clear"></div>';
-
-	/* provide a submit button */
-
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="randplace-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div></div>';
-
+	$data = [
+		'addon' => 'randplace',
+		'title' => DI::l10n()->t('Randplace Settings'),
+		'html'  => $html,
+	];
 }

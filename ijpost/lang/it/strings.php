@@ -2,13 +2,13 @@
 
 if(! function_exists("string_plural_select_it")) {
 function string_plural_select_it($n){
-	return ($n != 1);;
+	$n = intval($n);
+	return intval($n != 1);
 }}
-;
-$a->strings["Post to Insanejournal"] = "Invia a InsaneJournal";
-$a->strings["InsaneJournal Post Settings"] = "Impostazioni post InsaneJournal";
-$a->strings["Enable InsaneJournal Post Addon"] = "Abilita il componente aggiuntivo di invio a InsaneJournal";
-$a->strings["InsaneJournal username"] = "Nome utente InsaneJournal";
-$a->strings["InsaneJournal password"] = "Password InsaneJournal";
-$a->strings["Post to InsaneJournal by default"] = "Invia sempre a InsaneJournal";
-$a->strings["Submit"] = "Invia";
+$a->strings['Post to Insanejournal'] = 'Invia a InsaneJournal';
+$a->strings['InsaneJournal Export'] = 'Esporta InsaneJournal';
+$a->strings['Enable InsaneJournal Post Addon'] = 'Abilita il componente aggiuntivo di invio a InsaneJournal';
+$a->strings['InsaneJournal username'] = 'Nome utente InsaneJournal';
+$a->strings['InsaneJournal password'] = 'Password InsaneJournal';
+$a->strings['Post to InsaneJournal by default'] = 'Invia sempre a InsaneJournal';
+$a->strings['Save Settings'] = 'Salva Impostazioni';

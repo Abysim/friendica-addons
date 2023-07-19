@@ -11,7 +11,7 @@ use Friendica\Core\Hook;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\DI;
-use Friendica\Util\ConfigFileLoader;
+use Friendica\Core\Config\Util\ConfigFileManager;
 use Friendica\Util\XML;
 
 function geonames_install()
@@ -33,12 +33,12 @@ function geonames_install()
 	Hook::register('addon_settings_post', __FILE__, 'geonames_addon_settings_post');
 }
 
-function geonames_load_config(App $a, ConfigFileLoader $loader)
+function geonames_load_config(ConfigFileManager $loader)
 {
-	$a->getConfigCache()->load($loader->loadAddonConfig('geonames'));
+	DI::app()->getConfigCache()->load($loader->loadAddonConfig('geonames'), \Friendica\Core\Config\ValueObject\Cache::SOURCE_STATIC);
 }
 
-function geonames_post_hook(App $a, array &$item)
+function geonames_post_hook(array &$item)
 {
 	/* An item was posted on the local system.
 	 * We are going to look for specific items:
@@ -46,13 +46,13 @@ function geonames_post_hook(App $a, array &$item)
 	 *      - The profile owner must have allowed our addon
 	 */
 
-	Logger::log('geonames invoked');
+	Logger::notice('geonames invoked');
 
-	if (!local_user()) {   /* non-zero if this is a logged in user of this system */
+	if (!DI::userSession()->getLocalUserId()) {   /* non-zero if this is a logged in user of this system */
 		return;
 	}
 
-	if (local_user() != $item['uid']) {   /* Does this person own the post? */
+	if (DI::userSession()->getLocalUserId() != $item['uid']) {   /* Does this person own the post? */
 		return;
 	}
 
@@ -63,7 +63,7 @@ function geonames_post_hook(App $a, array &$item)
 	/* Retrieve our personal config setting */
 
 	$geo_account = DI::config()->get('geonames', 'username');
-	$active = DI::pConfig()->get(local_user(), 'geonames', 'enable');
+	$active = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'geonames', 'enable');
 
 	if (!$geo_account || !$active) {
 		return;
@@ -77,7 +77,7 @@ function geonames_post_hook(App $a, array &$item)
 
 	/* OK, we're allowed to do our stuff. */
 
-	$s = DI::httpRequest()->fetch('http://api.geonames.org/findNearbyPlaceName?lat=' . $coords[0] . '&lng=' . $coords[1] . '&username=' . $geo_account);
+	$s = DI::httpClient()->fetch('http://api.geonames.org/findNearbyPlaceName?lat=' . $coords[0] . '&lng=' . $coords[1] . '&username=' . $geo_account);
 
 	if (!$s) {
 		return;
@@ -97,50 +97,46 @@ function geonames_post_hook(App $a, array &$item)
  * We will make sure we've got a valid user account
  * and if so set our configuration setting for this person.
  *
- * @param App   $a
  * @param array $post The $_POST array
  */
-function geonames_addon_settings_post(App $a, array $post)
+function geonames_addon_settings_post(array $post)
 {
-	if (!local_user() || empty($_POST['geonames-submit'])) {
+	if (!DI::userSession()->getLocalUserId() || empty($_POST['geonames-submit'])) {
 		return;
 	}
 
-	DI::pConfig()->set(local_user(), 'geonames', 'enable', intval($_POST['geonames-enable']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'geonames', 'enable', intval($_POST['geonames-enable']));
 }
 
 /**
  * Called from the Addon Setting form.
  * Add our own settings info to the page.
  *
- * @param App    $a
- * @param string $s
+ * @param array $data
  * @throws Exception
  */
-function geonames_addon_settings(App $a, &$s)
+function geonames_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
 	$geo_account = DI::config()->get('geonames', 'username');
-
 	if (!$geo_account) {
 		return;
 	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
-	$stylesheetPath = __DIR__ . '/geonames.css';
-	DI::page()->registerStylesheet($stylesheetPath);
+	$enabled = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'geonames', 'enable'));
 
-	/* Get the current state of our config variable */
-	$enabled = intval(DI::pConfig()->get(local_user(), 'geonames', 'enable'));
-
-	$t = Renderer::getMarkupTemplate('settings.tpl', 'addon/geonames/');
-	$s .= Renderer::replaceMacros($t, [
-		'$title' => DI::l10n()->t('Geonames Settings'),
-		'$description' => DI::l10n()->t('Replace numerical coordinates by the nearest populated location name in your posts.'),
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/geonames/');
+	$html = Renderer::replaceMacros($t, [
+		'$info'   => DI::l10n()->t('Replace numerical coordinates by the nearest populated location name in your posts.'),
 		'$enable' => ['geonames-enable', DI::l10n()->t('Enable Geonames Addon'), $enabled],
-		'$submit' => DI::l10n()->t('Save Settings')
 	]);
+
+	$data = [
+		'addon' => 'geonames',
+		'title' => DI::l10n()->t('Geonames Settings'),
+		'html'  => $html,
+	];
 }

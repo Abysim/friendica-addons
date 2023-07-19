@@ -31,32 +31,34 @@ function langfilter_install()
  * 3rd parse a SMARTY3 template, replacing some translateable strings for the form
  */
 
-function langfilter_addon_settings(App $a, &$s)
+function langfilter_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$enabled = DI::pConfig()->get(local_user(), 'langfilter', 'enable',
-		!DI::pConfig()->get(local_user(), 'langfilter', 'disable'));
+	$enabled = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'enable',
+		!DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'disable'));
 
-	$enable_checked = $enabled ? ' checked="checked"' : '';
-	$languages      = DI::pConfig()->get(local_user(), 'langfilter', 'languages');
-	$minconfidence  = DI::pConfig()->get(local_user(), 'langfilter', 'minconfidence', 0) * 100;
-	$minlength      = DI::pConfig()->get(local_user(), 'langfilter', 'minlength'    , 32);
+	$languages     = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'languages');
+	$minconfidence = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'minconfidence', 0) * 100;
+	$minlength     = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'minlength', 32);
 
-	$t = Renderer::getMarkupTemplate("settings.tpl", "addon/langfilter/");
-	$s .= Renderer::replaceMacros($t, [
-		'$title'         => DI::l10n()->t("Language Filter"),
-		'$intro'         => DI::l10n()->t('This addon tries to identify the language posts are writen in. If it does not match any language specifed below, posts will be hidden by collapsing them.'),
-		'$enabled'       => ['langfilter_enable', DI::l10n()->t('Use the language filter'), $enable_checked, ''],
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/langfilter/');
+	$html = Renderer::replaceMacros($t, [
+		'$intro'         => DI::l10n()->t('This addon tries to identify the language posts are written in. If it does not match any language specified below, posts will be hidden by collapsing them.'),
+		'$enabled'       => ['langfilter_enable', DI::l10n()->t('Use the language filter'), $enabled],
 		'$languages'     => ['langfilter_languages', DI::l10n()->t('Able to read'), $languages, DI::l10n()->t('List of abbreviations (ISO 639-1 codes) for languages you speak, comma separated. For example "de,it".')],
 		'$minconfidence' => ['langfilter_minconfidence', DI::l10n()->t('Minimum confidence in language detection'), $minconfidence, DI::l10n()->t('Minimum confidence in language detection being correct, from 0 to 100. Posts will not be filtered when the confidence of language detection is below this percent value.')],
 		'$minlength'     => ['langfilter_minlength', DI::l10n()->t('Minimum length of message body'), $minlength, DI::l10n()->t('Minimum number of characters in message body for filter to be used. Posts shorter than this will not be filtered. Note: Language detection is unreliable for short content (<200 characters).')],
-		'$submit'        => DI::l10n()->t('Save Settings'),
 	]);
 
-	return;
+	$data = [
+		'addon'  => 'langfilter',
+		'title'  => DI::l10n()->t('Language Filter'),
+		'html'   => $html,
+		'submit' => ['langfilter-settings-submit' => DI::l10n()->t('Save Settings')],
+	];
 }
 
 /* Save the settings
@@ -65,9 +67,9 @@ function langfilter_addon_settings(App $a, &$s)
  * 3rd save the settings to the DB for later usage
  */
 
-function langfilter_addon_settings_post(App $a, &$b)
+function langfilter_addon_settings_post(array &$b)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
@@ -80,10 +82,10 @@ function langfilter_addon_settings_post(App $a, &$b)
 			$minlength = 32;
 		}
 
-		DI::pConfig()->set(local_user(), 'langfilter', 'enable'       , $enable);
-		DI::pConfig()->set(local_user(), 'langfilter', 'languages'    , $languages);
-		DI::pConfig()->set(local_user(), 'langfilter', 'minconfidence', $minconfidence);
-		DI::pConfig()->set(local_user(), 'langfilter', 'minlength'    , $minlength);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'langfilter', 'enable'       , $enable);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'langfilter', 'languages'    , $languages);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'langfilter', 'minconfidence', $minconfidence);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'langfilter', 'minlength'    , $minlength);
 	}
 }
 
@@ -96,16 +98,16 @@ function langfilter_addon_settings_post(App $a, &$b)
  *     expand it again.
  */
 
-function langfilter_prepare_body_content_filter(App $a, &$hook_data)
+function langfilter_prepare_body_content_filter(&$hook_data)
 {
-	$logged_user = local_user();
+	$logged_user = DI::userSession()->getLocalUserId();
 	if (!$logged_user) {
 		return;
 	}
 
 	// Never filter own messages
 	// TODO: find a better way to extract this
-	$logged_user_profile = DI::baseUrl()->get() . '/profile/' . $a->user['nickname'];
+	$logged_user_profile = DI::baseUrl() . '/profile/' . DI::userSession()->getLocalUserNickname();
 	if ($logged_user_profile == $hook_data['item']['author-link']) {
 		return;
 	}
@@ -117,10 +119,16 @@ function langfilter_prepare_body_content_filter(App $a, &$hook_data)
 		return;
 	}
 
-	$naked_body = BBCode::toPlaintext($hook_data['item']['body'], false);
+	$naked_body = strip_tags(
+		$hook_data['item']['rendered-html']
+		??''?: // Equivalent of !empty()
+		BBCode::convert($hook_data['item']['body'], false, BBCode::ACTIVITYPUB, true)
+	);
+
+	$naked_body = preg_replace('#\s+#', ' ', trim($naked_body));
 
 	// Don't filter if body lenght is below minimum
-	$minlen = DI::pConfig()->get(local_user(), 'langfilter', 'minlength', 32);
+	$minlen = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'minlength', 32);
 	if (!$minlen) {
 		$minlen = 32;
 	}
@@ -129,8 +137,8 @@ function langfilter_prepare_body_content_filter(App $a, &$hook_data)
 		return;
 	}
 
-	$read_languages_string = DI::pConfig()->get(local_user(), 'langfilter', 'languages');
-	$minconfidence = DI::pConfig()->get(local_user(), 'langfilter', 'minconfidence');
+	$read_languages_string = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'languages');
+	$minconfidence = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'langfilter', 'minconfidence');
 
 	// Don't filter if no spoken languages are configured
 	if (!$read_languages_string) {

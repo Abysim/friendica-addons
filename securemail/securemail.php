@@ -19,11 +19,11 @@ require_once __DIR__ . '/vendor/autoload.php';
 function securemail_install()
 {
 	Hook::register('addon_settings', 'addon/securemail/securemail.php', 'securemail_settings');
-	Hook::register('addon_settings_post', 'addon/securemail/securemail.php', 'securemail_settings_post');
+	Hook::register('addon_settings_post', 'addon/securemail/securemail.php', 'securemail_settings_post', 10);
 
-	Hook::register('emailer_send_prepare', 'addon/securemail/securemail.php', 'securemail_emailer_send_prepare');
+	Hook::register('emailer_send_prepare', 'addon/securemail/securemail.php', 'securemail_emailer_send_prepare', 10);
 
-	Logger::log('installed securemail');
+	Logger::notice('installed securemail');
 }
 
 /**
@@ -31,29 +31,34 @@ function securemail_install()
  *
  * @link  https://github.com/friendica/friendica/blob/develop/doc/Addons.md#addon_settings 'addon_settings' hook
  *
- * @param App    $a App instance
- * @param string $s output html
+ * @param array $data
  *
  * @see   App
  */
-function securemail_settings(App &$a, &$s)
+function securemail_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$enable = intval(DI::pConfig()->get(local_user(), 'securemail', 'enable'));
-	$publickey = DI::pConfig()->get(local_user(), 'securemail', 'pkey');
+	$enabled   = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'securemail', 'enable'));
+	$publickey = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'securemail', 'pkey');
 
-	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/securemail/');
-
-	$s .= Renderer::replaceMacros($t, [
-		'$title' => DI::l10n()->t('"Secure Mail" Settings'),
-		'$submit' => DI::l10n()->t('Save Settings'),
-		'$test' => DI::l10n()->t('Save and send test'), //NOTE: update also in 'post'
-		'$enable' => ['securemail-enable', DI::l10n()->t('Enable Secure Mail'), $enable, ''],
-		'$publickey' => ['securemail-pkey', DI::l10n()->t('Public key'), $publickey, DI::l10n()->t('Your public PGP key, ascii armored format'), 'rows="10"']
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/securemail/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled'   => ['securemail-enable', DI::l10n()->t('Enable Secure Mail'), $enabled],
+		'$publickey' => ['securemail-pkey', DI::l10n()->t('Public key'), $publickey, DI::l10n()->t('Your public PGP key, ascii armored format')]
 	]);
+
+	$data = [
+		'addon'  => 'securemail',
+		'title'  => DI::l10n()->t('"Secure Mail" Settings'),
+		'html'   => $html,
+		'submit' => [
+			'securemail-submit' => DI::l10n()->t('Save Settings'),
+			'securemail-test'   => DI::l10n()->t('Save and send test'),
+		],
+	];
 }
 
 /**
@@ -61,33 +66,31 @@ function securemail_settings(App &$a, &$s)
  *
  * @link  https://github.com/friendica/friendica/blob/develop/doc/Addons.md#addon_settings_post 'addon_settings_post' hook
  *
- * @param App   $a App instance
  * @param array $b hook data
  *
  * @see   App
  */
-function securemail_settings_post(App &$a, array &$b)
+function securemail_settings_post(array &$b)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	if ($_POST['securemail-submit']) {
-		DI::pConfig()->set(local_user(), 'securemail', 'pkey', trim($_POST['securemail-pkey']));
+	if (!empty($_POST['securemail-submit']) || !empty($_POST['securemail-test'])) {
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'securemail', 'pkey', trim($_POST['securemail-pkey']));
 		$enable = (!empty($_POST['securemail-enable']) ? 1 : 0);
-		DI::pConfig()->set(local_user(), 'securemail', 'enable', $enable);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'securemail', 'enable', $enable);
 
-		if ($_POST['securemail-submit'] == DI::l10n()->t('Save and send test')) {
-
+		if (!empty($_POST['securemail-test'])) {
 			$res = DI::emailer()->send(new SecureTestEmail(DI::app(), DI::config(), DI::pConfig(), DI::baseUrl()));
 
 			// revert to saved value
-			DI::pConfig()->set(local_user(), 'securemail', 'enable', $enable);
+			DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'securemail', 'enable', $enable);
 
 			if ($res) {
-				info(DI::l10n()->t('Test email sent') . EOL);
+				DI::sysmsg()->addInfo(DI::l10n()->t('Test email sent'));
 			} else {
-				notice(DI::l10n()->t('There was an error sending the test email') . EOL);
+				DI::sysmsg()->addNotice(DI::l10n()->t('There was an error sending the test email'));
 			}
 		}
 	}
@@ -98,12 +101,11 @@ function securemail_settings_post(App &$a, array &$b)
  *
  * @link  https://github.com/friendica/friendica/blob/develop/doc/Addons.md#emailer_send_prepare 'emailer_send_prepare' hook
  *
- * @param App   $a App instance
  * @param IEmail $email Email
  *
  * @see   App
  */
-function securemail_emailer_send_prepare(App &$a, IEmail &$email)
+function securemail_emailer_send_prepare(IEmail &$email)
 {
 	if (empty($email->getRecipientUid())) {
 		return;

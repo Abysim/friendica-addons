@@ -1,0 +1,151 @@
+# ADDON statusnet
+# Copyright (C)
+# This file is distributed under the same license as the Friendica statusnet addon package.
+# 
+# 
+# Translators:
+# Balázs Úr, 2020-2021
+msgid ""
+msgstr ""
+"Project-Id-Version: friendica\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2022-12-21 22:32+0000\n"
+"PO-Revision-Date: 2014-06-23 12:54+0000\n"
+"Last-Translator: Balázs Úr, 2020-2021\n"
+"Language-Team: Hungarian (http://app.transifex.com/Friendica/friendica/language/hu/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: hu\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: statusnet.php:76
+msgid "Post to GNU Social"
+msgstr "Beküldés a GNU Socialra"
+
+#: statusnet.php:122
+msgid ""
+"Please contact your site administrator.<br />The provided API URL is not "
+"valid."
+msgstr "Vegye fel a kapcsolatot az oldal adminisztrátorával.<br />A megadott API URL nem érvényes."
+
+#: statusnet.php:150
+msgid "We could not contact the GNU Social API with the Path you entered."
+msgstr "Nem tudtunk kapcsolatba lépni a GNU Social API-val azon az útvonalon, amelyet megadott."
+
+#: statusnet.php:208 statusnet.php:489
+msgid "Save Settings"
+msgstr "Beállítások mentése"
+
+#: statusnet.php:220
+#, php-format
+msgid "Currently connected to: <a href=\"%s\" target=\"_statusnet\">%s</a>"
+msgstr "Jelenleg ehhez kapcsolódott: <a href=\"%s\" target=\"_statusnet\">%s</a>"
+
+#: statusnet.php:225
+msgid ""
+"<strong>Note</strong>: Due your privacy settings (<em>Hide your profile "
+"details from unknown viewers?</em>) the link potentially included in public "
+"postings relayed to GNU Social will lead the visitor to a blank page "
+"informing the visitor that the access to your profile has been restricted."
+msgstr "<strong>Megjegyzés</strong>: az adatvédelmi beállításai miatt (<em>Elrejti a profilja részleteit az ismeretlen megtekintők elől?</em>) a GNU Socialra továbbított nyilvános beküldésekben vélhetően tartalmazott hivatkozás a látogatót egy üres oldalra fogja vezetni, amely arról tájékoztatja a látogatót, hogy a profiljához való hozzáférés korlátozva lett."
+
+#: statusnet.php:228
+msgid "Clear OAuth configuration"
+msgstr "OAuth beállítás törlése"
+
+#: statusnet.php:240
+msgid "Cancel GNU Social Connection"
+msgstr "GNU Social kapcsolódás megszakítása"
+
+#: statusnet.php:247
+msgid "Globally Available GNU Social OAuthKeys"
+msgstr "Globálisan elérhető GNU Social OAuth-kulcsok"
+
+#: statusnet.php:248
+msgid ""
+"There are preconfigured OAuth key pairs for some GNU Social servers "
+"available. If you are using one of them, please use these credentials. If "
+"not feel free to connect to any other GNU Social instance (see below)."
+msgstr "Előre beállított OAuth-kulcspárok érhetők el néhány GNU Social kiszolgálóhoz. Ha ezek egyikét használja, akkor használja ezeket a hitelesítési adatokat. Ha nem használja, akkor nyugodtan kapcsolódjon bármely egyéb GNU Social példányhoz (lásd lent)."
+
+#: statusnet.php:249
+msgid "Provide your own OAuth Credentials"
+msgstr "Adja meg a saját OAuth hitelesítési adatait"
+
+#: statusnet.php:250
+msgid ""
+"No consumer key pair for GNU Social found. Register your Friendica Account "
+"as a desktop application on your GNU Social account, copy the consumer key "
+"pair here and enter the API base root.<br />Before you register your own "
+"OAuth key pair ask the administrator if there is already a key pair for this"
+" Friendica installation at your favorite GNU Social installation."
+msgstr "Nem találhatók felhasználói kulcspárok a GNU Socialhoz. Regisztrálja a Friendica fiókját asztali alkalmazásként a GNU Social fiókjánál, másolja be a felhasználói kulcspárt ide, és adja meg az API alapgyökerét.<br />Mielőtt saját OAuth kulcspárt regisztrálna, kérdezze meg az adminisztrátort, hogy van-e már kulcspár ehhez a Friendica telepítéshez a kedvenc GNU Social telepítésénél."
+
+#: statusnet.php:251
+msgid ""
+"To connect to your GNU Social account click the button below to get a "
+"security code from GNU Social which you have to copy into the input box "
+"below and submit the form. Only your <strong>public</strong> posts will be "
+"posted to GNU Social."
+msgstr "A GNU Social fiókhoz való kapcsolódáshoz kattintson a lenti gombra, hogy megkapja a biztonsági kódot a GNU Socialtól, amelyet a lenti beviteli mezőbe kell bemásolnia, majd el kell küldenie az űrlapot. Csak a <strong>nyilvános</strong> bejegyzései lesznek beküldve a GNU Socialra."
+
+#: statusnet.php:252
+msgid "Log in with GNU Social"
+msgstr "Bejelentkezés GNU Social használatával"
+
+#: statusnet.php:253
+msgid "Cancel Connection Process"
+msgstr "Kapcsolódási folyamat megszakítása"
+
+#: statusnet.php:254
+#, php-format
+msgid "Current GNU Social API is: %s"
+msgstr "A jelenlegi GNU Social API: %s"
+
+#: statusnet.php:271
+msgid "OAuth Consumer Key"
+msgstr "OAuth felhasználói kulcs"
+
+#: statusnet.php:272
+msgid "OAuth Consumer Secret"
+msgstr "OAuth felhasználói titok"
+
+#: statusnet.php:274 statusnet.php:469 statusnet.php:481
+msgid "Base API Path (remember the trailing /)"
+msgstr "Alap API útvonal (ne felejtse el a záró / karaktert)"
+
+#: statusnet.php:275
+msgid "Copy the security code from GNU Social here"
+msgstr "Másolja be ide a GNU Socialtól származó biztonsági kódot"
+
+#: statusnet.php:277
+msgid "Allow posting to GNU Social"
+msgstr "Beküldés engedélyezése a GNU Socialra"
+
+#: statusnet.php:277
+msgid ""
+"If enabled all your <strong>public</strong> postings can be posted to the "
+"associated GNU Social account. You can choose to do so by default (here) or "
+"for every posting separately in the posting options when writing the entry."
+msgstr "Ha engedélyezve van, akkor az összes <strong>nyilvános</strong> beküldés beküldhető a hozzárendelt GNU Social fiókba. Kiválaszthatja, hogy ezt alapértelmezetten szeretné-e (itt), vagy minden egyes beküldésnél különállóan a beküldési beállításokban, amikor megírja a bejegyzést."
+
+#: statusnet.php:278
+msgid "Post to GNU Social by default"
+msgstr "Beküldés a GNU Socialra alapértelmezetten"
+
+#: statusnet.php:283
+msgid "GNU Social Import/Export/Mirror"
+msgstr "GNU Social importálás, exportálás vagy tükrözés"
+
+#: statusnet.php:480
+msgid "Site name"
+msgstr "Oldal neve"
+
+#: statusnet.php:482
+msgid "Consumer Secret"
+msgstr "Felhasználói titok"
+
+#: statusnet.php:483
+msgid "Consumer Key"
+msgstr "Felhasználói kulcs"

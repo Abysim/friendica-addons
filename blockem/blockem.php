@@ -5,12 +5,16 @@
  * Version: 1.0
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
  * Author: Roland Haeder <https://f.haeder.net/roland>
+ * Status: unsupported
  */
 
 use Friendica\App;
 use Friendica\Core\Hook;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 use Friendica\Util\Strings;
+
+global $blockem_words;
 
 function blockem_install()
 {
@@ -23,53 +27,39 @@ function blockem_install()
 	Hook::register('enotify_store'              , 'addon/blockem/blockem.php', 'blockem_enotify_store');
 }
 
-function blockem_addon_settings (App $a, &$s)
+function blockem_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
-	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/blockem/blockem.css' . '" media="all" />' . "\r\n";
+	$words   = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'blockem', 'words', '');
 
-	$words = DI::pConfig()->get(local_user(), 'blockem', 'words');
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/blockem/');
+	$html = Renderer::replaceMacros($t, [
+		'$info'    => DI::l10n()->t("Hides user's content by collapsing posts. Also replaces their avatar with generic image."),
+		'$words'   => ['blockem-words', DI::l10n()->t('Comma separated profile URLS:'), $words],
+	]);
 
-	if (!$words) {
-		$words = '';
-	}
-
-	$s .= '<span id="settings_blockem_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_blockem_expanded\'); openClose(\'settings_blockem_inflated\');">';
-	$s .= '<h3>' . DI::l10n()->t('Blockem') . '</h3>';
-	$s .= '</span>';
-	$s .= '<div id="settings_blockem_expanded" class="settings-block" style="display: none;">';
-	$s .= '<span class="fakelink" onclick="openClose(\'settings_blockem_expanded\'); openClose(\'settings_blockem_inflated\');">';
-	$s .= '<h3>' . DI::l10n()->t('Blockem') . '</h3>';
-	$s .= '</span>';
-
-	$s .= '<div id="blockem-wrapper">';
-	$s .= '<div id="blockem-desc">'. DI::l10n()->t("Hides user's content by collapsing posts. Also replaces their avatar with generic image.") . ' </div>';
-	$s .= '<label id="blockem-label" for="blockem-words">' . DI::l10n()->t('Comma separated profile URLS:') . ' </label>';
-	$s .= '<textarea id="blockem-words" type="text" name="blockem-words" >' . htmlspecialchars($words) . '</textarea>';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="blockem-submit" name="blockem-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div></div>';
-
-	return;
-
+	$data = [
+		'addon' => 'blockem',
+		'title' => DI::l10n()->t('Blockem'),
+		'html'  => $html,
+	];
 }
 
-function blockem_addon_settings_post(App $a, array &$b)
+function blockem_addon_settings_post(array &$b)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
 	if (!empty($_POST['blockem-submit'])) {
-		DI::pConfig()->set(local_user(), 'blockem', 'words', trim($_POST['blockem-words']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'blockem', 'words', trim($_POST['blockem-words']));
 	}
 }
 
-function blockem_enotify_store(App $a, array &$b)
+function blockem_enotify_store(array &$b)
 {
 	$words = DI::pConfig()->get($b['uid'], 'blockem', 'words');
 
@@ -100,16 +90,16 @@ function blockem_enotify_store(App $a, array &$b)
 	}
 }
 
-function blockem_prepare_body_content_filter(App $a, array &$hook_data)
+function blockem_prepare_body_content_filter(array &$hook_data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
 	$profiles_string = null;
 
-	if (local_user()) {
-		$profiles_string = DI::pConfig()->get(local_user(), 'blockem', 'words');
+	if (DI::userSession()->getLocalUserId()) {
+		$profiles_string = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'blockem', 'words');
 	}
 
 	if ($profiles_string) {
@@ -132,23 +122,25 @@ function blockem_prepare_body_content_filter(App $a, array &$hook_data)
 	}
 }
 
-function blockem_display_item(App $a, array &$b = null)
+function blockem_display_item(array &$b = null)
 {
 	if (!empty($b['output']['body']) && strstr($b['output']['body'], 'id="blockem-wrap-')) {
-		$b['output']['thumb'] = DI::baseUrl()->get() . "/images/person-80.jpg";
+		$b['output']['thumb'] = DI::baseUrl() . "/images/person-80.jpg";
 	}
 }
 
-function blockem_conversation_start(App $a, array &$b)
+function blockem_conversation_start(array &$b)
 {
-	if (!local_user()) {
+	global $blockem_words;
+
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$words = DI::pConfig()->get(local_user(), 'blockem', 'words');
+	$words = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'blockem', 'words');
 
 	if ($words) {
-		$a->data['blockem'] = explode(',', $words);
+		$blockem_words = explode(',', $words);
 	}
 
 	DI::page()['htmlhead'] .= <<< EOT
@@ -169,17 +161,19 @@ function blockemUnblock(author) {
 EOT;
 }
 
-function blockem_item_photo_menu(App $a, array &$b)
+function blockem_item_photo_menu(array &$b)
 {
-	if (!local_user() || $b['item']['self']) {
+	global $blockem_words;
+
+	if (!DI::userSession()->getLocalUserId() || $b['item']['self']) {
 		return;
 	}
 
 	$blocked = false;
 	$author = $b['item']['author-link'];
 
-	if (!empty($a->data['blockem'])) {
-		foreach($a->data['blockem'] as $bloke) {
+	if (!empty($blockem_words)) {
+		foreach($blockem_words as $bloke) {
 			if (Strings::compareLink($bloke,$author)) {
 				$blocked = true;
 				break;
@@ -193,17 +187,20 @@ function blockem_item_photo_menu(App $a, array &$b)
 	}
 }
 
-function blockem_module()
-{
-}
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
+function blockem_module() {}
 
-function blockem_init(App $a)
+function blockem_init()
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$words = DI::pConfig()->get(local_user(), 'blockem', 'words');
+	$words = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'blockem', 'words');
 
 	if (array_key_exists('block', $_GET) && $_GET['block']) {
 		if (strlen($words)) {
@@ -228,6 +225,6 @@ function blockem_init(App $a)
 		$words = implode(',', $newarr);
 	}
 
-	DI::pConfig()->set(local_user(), 'blockem', 'words', $words);
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'blockem', 'words', $words);
 	exit();
 }

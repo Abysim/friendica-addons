@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2013-02-27 05:01-0500\n"
+"POT-Creation-Date: 2021-11-21 19:17-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,30 +17,26 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: dwpost.php:39
+#: dwpost.php:43
 msgid "Post to Dreamwidth"
 msgstr ""
 
-#: dwpost.php:70
-msgid "Dreamwidth Post Settings"
+#: dwpost.php:63
+msgid "Enable Dreamwidth Post Addon"
 msgstr ""
 
-#: dwpost.php:72
-msgid "Enable dreamwidth Post Addon"
+#: dwpost.php:64
+msgid "Dreamwidth username"
 msgstr ""
 
-#: dwpost.php:77
-msgid "dreamwidth username"
+#: dwpost.php:65
+msgid "Dreamwidth password"
 msgstr ""
 
-#: dwpost.php:82
-msgid "dreamwidth password"
+#: dwpost.php:66
+msgid "Post to Dreamwidth by default"
 msgstr ""
 
-#: dwpost.php:87
-msgid "Post to dreamwidth by default"
-msgstr ""
-
-#: dwpost.php:93
-msgid "Submit"
+#: dwpost.php:71
+msgid "Dreamwidth Export"
 msgstr ""

@@ -15,6 +15,7 @@ use Friendica\Database\DBA;
 use Friendica\DI;
 use Friendica\Model\Contact;
 use Friendica\Model\Photo;
+use Friendica\Model\Profile;
 use Friendica\Network\HTTPException\NotFoundException;
 
 define("CATAVATAR_SIZE", 256);
@@ -24,113 +25,105 @@ define("CATAVATAR_SIZE", 256);
  */
 function catavatar_install()
 {
-	Hook::register('avatar_lookup', 'addon/catavatar/catavatar.php', 'catavatar_lookup');
-	Hook::register('addon_settings', 'addon/catavatar/catavatar.php', 'catavatar_addon_settings');
-	Hook::register('addon_settings_post', 'addon/catavatar/catavatar.php', 'catavatar_addon_settings_post');
+	Hook::register('avatar_lookup', __FILE__, 'catavatar_lookup');
+	Hook::register('addon_settings', __FILE__, 'catavatar_addon_settings');
+	Hook::register('addon_settings_post', __FILE__, 'catavatar_addon_settings_post');
 
-	Logger::log('registered catavatar');
+	Logger::notice('registered catavatar');
 }
 
 /**
  * Cat avatar user settings page
  */
-function catavatar_addon_settings(App $a, &$s)
+function catavatar_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$t = Renderer::getMarkupTemplate('settings.tpl', 'addon/catavatar/');
-	$s .= Renderer::replaceMacros($t, [
-		'$postpost' => !empty($_POST['catavatar-morecat']) || !empty($_POST['catavatar-emailcat']),
-		'$uncache' => time(),
-		'$uid' => local_user(),
-		'$usecat' => DI::l10n()->t('Use Cat as Avatar'),
-		'$morecat' => DI::l10n()->t('More Random Cat!'),
-		'$emailcat' => DI::l10n()->t('Reset to email Cat'),
-		'$seed' => DI::pConfig()->get(local_user(), 'catavatar', 'seed', false),
-		'$header' => DI::l10n()->t('Cat Avatar Settings'),
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/catavatar/');
+	$html = Renderer::replaceMacros($t, [
+		'$uncache'      => time(),
+		'$uid'          => DI::userSession()->getLocalUserId(),
 		'$setrandomize' => DI::l10n()->t('Set default profile avatar or randomize the cat.'),
 	]);
+
+	$data = [
+		'addon'  => 'catavar',
+		'title'  => DI::l10n()->t('Cat Avatar Settings'),
+		'html'   => $html,
+		'submit' => [
+			'catavatar-usecat'   => DI::l10n()->t('Use Cat as Avatar'),
+			'catavatar-morecat'  => DI::l10n()->t('Another random Cat!'),
+			'catavatar-emailcat' => DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'catavatar', 'seed', false) ? DI::l10n()->t('Reset to email Cat') : null,
+		],
+	];
 }
 
 /**
  * Cat avatar user settings POST handle
  */
-function catavatar_addon_settings_post(App $a, &$s)
+function catavatar_addon_settings_post(&$s)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	// delete the current cached cat avatar
-	$condition = ['uid' => local_user(), 'blocked' => false,
-			'account_expired' => false, 'account_removed' => false];
-	$user = DBA::selectFirst('user', ['email'], $condition);
-
-	$seed = DI::pConfig()->get(local_user(), 'catavatar', 'seed', md5(trim(strtolower($user['email']))));
-
 	if (!empty($_POST['catavatar-usecat'])) {
-		$url = DI::baseUrl()->get() . '/catavatar/' . local_user() . '?ts=' . time();
+		$url = DI::baseUrl() . '/catavatar/' . DI::userSession()->getLocalUserId() . '?ts=' . time();
 
-		$self = DBA::selectFirst('contact', ['id'], ['uid' => local_user(), 'self' => true]);
+		$self = DBA::selectFirst('contact', ['id'], ['uid' => DI::userSession()->getLocalUserId(), 'self' => true]);
 		if (!DBA::isResult($self)) {
-			notice(DI::l10n()->t("The cat hadn't found itself."));
+			DI::sysmsg()->addNotice(DI::l10n()->t("The cat hadn't found itself."));
 			return;
 		}
 
-		Photo::importProfilePhoto($url, local_user(), $self['id']);
+		Photo::importProfilePhoto($url, DI::userSession()->getLocalUserId(), $self['id']);
 
-		$condition = ['uid' => local_user(), 'contact-id' => $self['id']];
+		$condition = ['uid' => DI::userSession()->getLocalUserId(), 'contact-id' => $self['id']];
 		$photo = DBA::selectFirst('photo', ['resource-id'], $condition);
 		if (!DBA::isResult($photo)) {
-			notice(DI::l10n()->t('There was an error, the cat ran away.'));
+			DI::sysmsg()->addNotice(DI::l10n()->t('There was an error, the cat ran away.'));
 			return;
 		}
 
-		DBA::update('photo', ['profile' => false], ['profile' => true, 'uid' => local_user()]);
+		DBA::update('photo', ['profile' => false], ['profile' => true, 'uid' => DI::userSession()->getLocalUserId()]);
 
 		$fields = ['profile' => true, 'album' => DI::l10n()->t('Profile Photos'), 'contact-id' => 0];
-		DBA::update('photo', $fields, ['uid' => local_user(), 'resource-id' => $photo['resource-id']]);
+		DBA::update('photo', $fields, ['uid' => DI::userSession()->getLocalUserId(), 'resource-id' => $photo['resource-id']]);
 
-		Photo::importProfilePhoto($url, local_user(), $self['id']);
+		Photo::importProfilePhoto($url, DI::userSession()->getLocalUserId(), $self['id']);
 
-		Contact::updateSelfFromUserID(local_user(), true);
+		Contact::updateSelfFromUserID(DI::userSession()->getLocalUserId(), true);
 
 		// Update global directory in background
-		$url = DI::baseUrl()->get() . '/profile/' . $a->user['nickname'];
-		if ($url && strlen(DI::config()->get('system', 'directory'))) {
-			Worker::add(PRIORITY_LOW, 'Directory', $url);
-		}
+		Profile::publishUpdate(DI::userSession()->getLocalUserId());
 
-		Worker::add(PRIORITY_LOW, 'ProfileUpdate', local_user());
-
-		info(DI::l10n()->t('Meow!'));
+		DI::sysmsg()->addInfo(DI::l10n()->t('Meow!'));
 		return;
 	}
 
 	if (!empty($_POST['catavatar-morecat'])) {
-		DI::pConfig()->set(local_user(), 'catavatar', 'seed', time());
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'catavatar', 'seed', time());
 	}
 
 	if (!empty($_POST['catavatar-emailcat'])) {
-		DI::pConfig()->delete(local_user(), 'catavatar', 'seed');
+		DI::pConfig()->delete(DI::userSession()->getLocalUserId(), 'catavatar', 'seed');
 	}
 }
 
 /**
  * Returns the URL to the cat avatar
  *
- * @param $a array
  * @param &$b array
  */
-function catavatar_lookup(App $a, &$b)
+function catavatar_lookup(array &$b)
 {
 	$user = DBA::selectFirst('user', ['uid'], ['email' => $b['email']]);
 	if (DBA::isResult($user)) {
-		$url = DI::baseUrl()->get() . '/catavatar/' . $user['uid'];
+		$url = DI::baseUrl() . '/catavatar/' . $user['uid'];
 	} else {
-		$url = DI::baseUrl()->get() . '/catavatar/' . md5(trim(strtolower($b['email'])));
+		$url = DI::baseUrl() . '/catavatar/' . md5(trim(strtolower($b['email'])));
 	}
 
 	switch($b['size']) {
@@ -143,6 +136,11 @@ function catavatar_lookup(App $a, &$b)
 	$b['success'] = true;
 }
 
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
 function catavatar_module() {}
 
 /**
@@ -151,14 +149,14 @@ function catavatar_module() {}
  * @throws NotFoundException
  *
  */
-function catavatar_content(App $a)
+function catavatar_content()
 {
-	if ($a->argc < 2 || $a->argc > 3) {
+	if (DI::args()->getArgc() < 2 || DI::args()->getArgc() > 3) {
 		throw new NotFoundException(); // this should be catched on index and show default "not found" page.
 	}
 
-	if (is_numeric($a->argv[1])) {
-		$uid = intval($a->argv[1]);
+	if (is_numeric(DI::args()->getArgv()[1])) {
+		$uid = intval(DI::args()->getArgv()[1]);
 		$condition = ['uid' => $uid,
 				'account_expired' => false, 'account_removed' => false];
 		$user = DBA::selectFirst('user', ['email'], $condition);
@@ -168,15 +166,15 @@ function catavatar_content(App $a)
 		}
 
 		$seed = DI::pConfig()->get($uid, "catavatar", "seed", md5(trim(strtolower($user['email']))));
-	} elseif (!empty($a->argv[1])) {
-		$seed = $a->argv[1];
+	} elseif (!empty(DI::args()->getArgv()[1])) {
+		$seed = DI::args()->getArgv()[1];
 	} else {
 		throw new NotFoundException();
 	}
 
 	$size = 0;
-	if ($a->argc == 3) {
-		$size = intval($a->argv[2]);
+	if (DI::args()->getArgc() == 3) {
+		$size = intval(DI::args()->getArgv()[2]);
 	}
 
 	// ...Or start generation

@@ -43,7 +43,9 @@ use Friendica\Database\DBA;
 use Friendica\Database\DBStructure;
 use Friendica\DI;
 use Friendica\Model\Item;
+use Friendica\Model\Post;
 use Friendica\Model\Tag;
+use Friendica\Model\User;
 use Friendica\Module\Security\Login;
 use Friendica\Network\HTTPException;
 use Friendica\Util\DateTimeFormat;
@@ -53,43 +55,67 @@ use Symfony\Component\ExpressionLanguage;
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
 
-function advancedcontentfilter_install(App $a)
+function advancedcontentfilter_install()
 {
 	Hook::register('dbstructure_definition'     , __FILE__, 'advancedcontentfilter_dbstructure_definition');
 	Hook::register('prepare_body_content_filter', __FILE__, 'advancedcontentfilter_prepare_body_content_filter');
 	Hook::register('addon_settings'             , __FILE__, 'advancedcontentfilter_addon_settings');
 
 	Hook::add('dbstructure_definition'          , __FILE__, 'advancedcontentfilter_dbstructure_definition');
-	DBStructure::update($a->getBasePath(), false, true);
+	DBStructure::performUpdate();
 
-	Logger::log("installed advancedcontentfilter");
+	Logger::notice('installed advancedcontentfilter');
 }
 
 /*
  * Hooks
  */
 
-function advancedcontentfilter_dbstructure_definition(App $a, &$database)
+function advancedcontentfilter_dbstructure_definition(&$database)
 {
-	$database["advancedcontentfilter_rules"] = [
-		"comment" => "Advancedcontentfilter addon rules",
-		"fields" => [
-			"id"         => ["type" => "int unsigned", "not null" => "1", "extra" => "auto_increment", "primary" => "1", "comment" => "Auto incremented rule id"],
-			"uid"        => ["type" => "int unsigned", "not null" => "1", "comment" => "Owner user id"],
-			"name"       => ["type" => "varchar(255)", "not null" => "1", "comment" => "Rule name"],
-			"expression" => ["type" => "mediumtext"  , "not null" => "1", "comment" => "Expression text"],
-			"serialized" => ["type" => "mediumtext"  , "not null" => "1", "comment" => "Serialized parsed expression"],
-			"active"     => ["type" => "boolean"     , "not null" => "1", "default" => "1", "comment" => "Whether the rule is active or not"],
-			"created"    => ["type" => "datetime"    , "not null" => "1", "default" => DBA::NULL_DATETIME, "comment" => "Creation date"],
+	$database['advancedcontentfilter_rules'] = [
+		'comment' => 'Advancedcontentfilter addon rules',
+		'fields' => [
+			'id'         => ['type' => 'int unsigned', 'not null' => '1', 'extra' => 'auto_increment', 'primary' => '1', 'comment' => 'Auto incremented rule id'],
+			'uid'        => ['type' => 'int unsigned', 'not null' => '1', 'comment' => 'Owner user id'],
+			'name'       => ['type' => 'varchar(255)', 'not null' => '1', 'comment' => 'Rule name'],
+			'expression' => ['type' => 'mediumtext'  , 'not null' => '1', 'comment' => 'Expression text'],
+			'serialized' => ['type' => 'mediumtext'  , 'not null' => '1', 'comment' => 'Serialized parsed expression'],
+			'active'     => ['type' => 'boolean'     , 'not null' => '1', 'default' => '1', 'comment' => 'Whether the rule is active or not'],
+			'created'    => ['type' => 'datetime'    , 'not null' => '1', 'default' => DBA::NULL_DATETIME, 'comment' => 'Creation date'],
 		],
-		"indexes" => [
-			"PRIMARY" => ["id"],
-			"uid_active" => ["uid", "active"],
+		'indexes' => [
+			'PRIMARY' => ['id'],
+			'uid_active' => ['uid', 'active'],
 		]
 	];
 }
 
-function advancedcontentfilter_prepare_body_content_filter(App $a, &$hook_data)
+/**
+ * @param array $item Prepared by either Model\Item::prepareBody or advancedcontentfilter_prepare_item_row
+ * @return array
+ */
+function advancedcontentfilter_get_filter_fields(array $item)
+{
+	$vars = [];
+
+	// Convert the language JSON text into a filterable format
+	if (!empty($item['language']) && ($languages = json_decode($item['language'], true))) {
+		foreach ($languages as $key => $value) {
+			$vars['language_' . strtolower($key)] = $value;
+		}
+	}
+
+	foreach ($item as $key => $value) {
+		$vars[str_replace('-', '_', $key)] = $value;
+	}
+
+	ksort($vars);
+
+	return $vars;
+}
+
+function advancedcontentfilter_prepare_body_content_filter(&$hook_data)
 {
 	static $expressionLanguage;
 
@@ -97,24 +123,21 @@ function advancedcontentfilter_prepare_body_content_filter(App $a, &$hook_data)
 		$expressionLanguage = new ExpressionLanguage\ExpressionLanguage();
 	}
 
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$vars = [];
-	foreach ($hook_data['item'] as $key => $value) {
-		$vars[str_replace('-', '_', $key)] = $value;
-	}
+	$vars = advancedcontentfilter_get_filter_fields($hook_data['item']);
 
-	$rules = DI::cache()->get('rules_' . local_user());
+	$rules = DI::cache()->get('rules_' . DI::userSession()->getLocalUserId());
 	if (!isset($rules)) {
 		$rules = DBA::toArray(DBA::select(
 			'advancedcontentfilter_rules',
 			['name', 'expression', 'serialized'],
-			['uid' => local_user(), 'active' => true]
+			['uid' => DI::userSession()->getLocalUserId(), 'active' => true]
 		));
 
-		DI::cache()->set('rules_' . local_user(), $rules);
+		DI::cache()->set('rules_' . DI::userSession()->getLocalUserId(), $rules);
 	}
 
 	if ($rules) {
@@ -140,30 +163,33 @@ function advancedcontentfilter_prepare_body_content_filter(App $a, &$hook_data)
 }
 
 
-function advancedcontentfilter_addon_settings(App $a, &$s)
+function advancedcontentfilter_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$advancedcontentfilter = DI::l10n()->t('Advanced Content Filter');
-
-	$s .= <<<HTML
-		<span class="settings-block fakelink" style="display: block;"><h3><a href="advancedcontentfilter">$advancedcontentfilter <i class="glyphicon glyphicon-share"></i></a></h3></span>
-HTML;
-
-	return;
+	$data = [
+		'addon' => 'advancedcontentfilter',
+		'title' => DI::l10n()->t('Advanced Content Filter'),
+		'href'  => 'advancedcontentfilter',
+	];
 }
 
 /*
  * Module
  */
 
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
 function advancedcontentfilter_module() {}
 
-function advancedcontentfilter_init(App $a)
+function advancedcontentfilter_init()
 {
-	if ($a->argc > 1 && $a->argv[1] == 'api') {
+	if (DI::args()->getArgc() > 1 && DI::args()->getArgv()[1] == 'api') {
 		$slim = new \Slim\App();
 
 		require __DIR__ . '/src/middlewares.php';
@@ -175,14 +201,16 @@ function advancedcontentfilter_init(App $a)
 	}
 }
 
-function advancedcontentfilter_content(App $a)
+function advancedcontentfilter_content()
 {
-	if (!local_user()) {
-		return Login::form('/' . implode('/', $a->argv));
+	if (!DI::userSession()->getLocalUserId()) {
+		return Login::form('/' . implode('/', DI::args()->getArgv()));
 	}
 
-	if ($a->argc > 1 && $a->argv[1] == 'help') {
-		$lang = $a->user['language'];
+	if (DI::args()->getArgc() > 1 && DI::args()->getArgv()[1] == 'help') {
+		$user = User::getById(DI::userSession()->getLocalUserId());
+
+		$lang = $user['language'];
 
 		$default_dir = 'addon/advancedcontentfilter/doc/';
 		$help_file = 'advancedcontentfilter.md';
@@ -224,7 +252,7 @@ function advancedcontentfilter_content(App $a)
 				'rule_expression'   => DI::l10n()->t('Rule Expression'),
 				'cancel'            => DI::l10n()->t('Cancel'),
 			],
-			'$current_theme' => $a->getCurrentTheme(),
+			'$current_theme' => DI::app()->getCurrentTheme(),
 			'$rules' => advancedcontentfilter_get_rules(),
 			'$form_security_token' => BaseModule::getFormSecurityToken()
 		]);
@@ -243,29 +271,20 @@ function advancedcontentfilter_build_fields($data)
 	}
 
 	if (!empty($data['expression'])) {
-		$allowed_keys = [
-			'author_id', 'author_link', 'author_name', 'author_avatar',
-			'owner_id', 'owner_link', 'owner_name', 'owner_avatar',
-			'contact_id', 'uid', 'id', 'parent', 'uri',
-			'thr_parent', 'parent_uri',
-			'content_warning',
-			'commented', 'created', 'edited', 'received',
-			'verb', 'object_type', 'postopts', 'plink', 'guid', 'wall', 'private', 'starred',
-			'title', 'body',
-			'file', 'event_id', 'location', 'coord', 'app', 'attach',
-			'rendered_hash', 'rendered_html', 'object',
-			'allow_cid', 'allow_gid', 'deny_cid', 'deny_gid',
-			'item_id', 'item_network', 'author_thumb', 'owner_thumb',
-			'network', 'url', 'name', 'writable', 'self',
-			'cid', 'alias',
-			'event_created', 'event_edited', 'event_start', 'event_finish', 'event_summary',
-			'event_desc', 'event_location', 'event_type', 'event_nofinish', 'event_adjust', 'event_ignore',
-			'children', 'pagedrop', 'tags', 'hashtags', 'mentions',
-		];
+		// Using a dummy item to validate the field existence
+		$condition = ["(`uid` = ? OR `uid` = 0)", DI::userSession()->getLocalUserId()];
+		$params = ['order' => ['uid' => true]];
+		$item_row = Post::selectFirstForUser(DI::userSession()->getLocalUserId(), [], $condition, $params);
+
+		if (!DBA::isResult($item_row)) {
+			throw new HTTPException\NotFoundException(DI::l10n()->t('This addon requires this node having at least one post'));
+		}
 
 		$expressionLanguage = new ExpressionLanguage\ExpressionLanguage();
-
-		$parsedExpression = $expressionLanguage->parse($data['expression'], $allowed_keys);
+		$parsedExpression = $expressionLanguage->parse(
+			$data['expression'],
+			array_keys(advancedcontentfilter_get_filter_fields(advancedcontentfilter_prepare_item_row($item_row)))
+		);
 
 		$serialized = serialize($parsedExpression->getNodes());
 
@@ -288,29 +307,29 @@ function advancedcontentfilter_build_fields($data)
 
 function advancedcontentfilter_get_rules()
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		throw new HTTPException\UnauthorizedException(DI::l10n()->t('You must be logged in to use this method'));
 	}
 
-	$rules = DBA::toArray(DBA::select('advancedcontentfilter_rules', [], ['uid' => local_user()]));
+	$rules = DBA::toArray(DBA::select('advancedcontentfilter_rules', [], ['uid' => DI::userSession()->getLocalUserId()]));
 
 	return json_encode($rules);
 }
 
 function advancedcontentfilter_get_rules_id(ServerRequestInterface $request, ResponseInterface $response, $args)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		throw new HTTPException\UnauthorizedException(DI::l10n()->t('You must be logged in to use this method'));
 	}
 
-	$rule = DBA::selectFirst('advancedcontentfilter_rules', [], ['id' => $args['id'], 'uid' => local_user()]);
+	$rule = DBA::selectFirst('advancedcontentfilter_rules', [], ['id' => $args['id'], 'uid' => DI::userSession()->getLocalUserId()]);
 
 	return json_encode($rule);
 }
 
 function advancedcontentfilter_post_rules(ServerRequestInterface $request)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		throw new HTTPException\UnauthorizedException(DI::l10n()->t('You must be logged in to use this method'));
 	}
 
@@ -330,7 +349,7 @@ function advancedcontentfilter_post_rules(ServerRequestInterface $request)
 		throw new HTTPException\BadRequestException(DI::l10n()->t('The rule name and expression are required.'));
 	}
 
-	$fields['uid'] = local_user();
+	$fields['uid'] = DI::userSession()->getLocalUserId();
 	$fields['created'] = DateTimeFormat::utcNow();
 
 	if (!DBA::insert('advancedcontentfilter_rules', $fields)) {
@@ -339,12 +358,14 @@ function advancedcontentfilter_post_rules(ServerRequestInterface $request)
 
 	$rule = DBA::selectFirst('advancedcontentfilter_rules', [], ['id' => DBA::lastInsertId()]);
 
+	DI::cache()->delete('rules_' . DI::userSession()->getLocalUserId());
+
 	return json_encode(['message' => DI::l10n()->t('Rule successfully added'), 'rule' => $rule]);
 }
 
 function advancedcontentfilter_put_rules_id(ServerRequestInterface $request, ResponseInterface $response, $args)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		throw new HTTPException\UnauthorizedException(DI::l10n()->t('You must be logged in to use this method'));
 	}
 
@@ -352,7 +373,7 @@ function advancedcontentfilter_put_rules_id(ServerRequestInterface $request, Res
 		throw new HTTPException\BadRequestException(DI::l10n()->t('Invalid form security token, please refresh the page.'));
 	}
 
-	if (!DBA::exists('advancedcontentfilter_rules', ['id' => $args['id'], 'uid' => local_user()])) {
+	if (!DBA::exists('advancedcontentfilter_rules', ['id' => $args['id'], 'uid' => DI::userSession()->getLocalUserId()])) {
 		throw new HTTPException\NotFoundException(DI::l10n()->t('Rule doesn\'t exist or doesn\'t belong to you.'));
 	}
 
@@ -368,12 +389,14 @@ function advancedcontentfilter_put_rules_id(ServerRequestInterface $request, Res
 		throw new HTTPException\ServiceUnavailableException(DBA::errorMessage());
 	}
 
+	DI::cache()->delete('rules_' . DI::userSession()->getLocalUserId());
+
 	return json_encode(['message' => DI::l10n()->t('Rule successfully updated')]);
 }
 
 function advancedcontentfilter_delete_rules_id(ServerRequestInterface $request, ResponseInterface $response, $args)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		throw new HTTPException\UnauthorizedException(DI::l10n()->t('You must be logged in to use this method'));
 	}
 
@@ -381,7 +404,7 @@ function advancedcontentfilter_delete_rules_id(ServerRequestInterface $request, 
 		throw new HTTPException\BadRequestException(DI::l10n()->t('Invalid form security token, please refresh the page.'));
 	}
 
-	if (!DBA::exists('advancedcontentfilter_rules', ['id' => $args['id'], 'uid' => local_user()])) {
+	if (!DBA::exists('advancedcontentfilter_rules', ['id' => $args['id'], 'uid' => DI::userSession()->getLocalUserId()])) {
 		throw new HTTPException\NotFoundException(DI::l10n()->t('Rule doesn\'t exist or doesn\'t belong to you.'));
 	}
 
@@ -389,12 +412,14 @@ function advancedcontentfilter_delete_rules_id(ServerRequestInterface $request, 
 		throw new HTTPException\ServiceUnavailableException(DBA::errorMessage());
 	}
 
+	DI::cache()->delete('rules_' . DI::userSession()->getLocalUserId());
+
 	return json_encode(['message' => DI::l10n()->t('Rule successfully deleted')]);
 }
 
 function advancedcontentfilter_get_variables_guid(ServerRequestInterface $request, ResponseInterface $response, $args)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		throw new HTTPException\UnauthorizedException(DI::l10n()->t('You must be logged in to use this method'));
 	}
 
@@ -402,24 +427,35 @@ function advancedcontentfilter_get_variables_guid(ServerRequestInterface $reques
 		throw new HTTPException\BadRequestException(DI::l10n()->t('Missing argument: guid.'));
 	}
 
-	$condition = ["`guid` = ? AND (`uid` = ? OR `uid` = 0)", $args['guid'], local_user()];
+	$condition = ["`guid` = ? AND (`uid` = ? OR `uid` = 0)", $args['guid'], DI::userSession()->getLocalUserId()];
 	$params = ['order' => ['uid' => true]];
-	$item = Item::selectFirstForUser(local_user(), [], $condition, $params);
+	$item_row = Post::selectFirstForUser(DI::userSession()->getLocalUserId(), [], $condition, $params);
 
-	if (!DBA::isResult($item)) {
+	if (!DBA::isResult($item_row)) {
 		throw new HTTPException\NotFoundException(DI::l10n()->t('Unknown post with guid: %s', $args['guid']));
 	}
 
-	$tags = Tag::populateFromItem($item);
-
-	$item['tags'] = $tags['tags'];
-	$item['hashtags'] = $tags['hashtags'];
-	$item['mentions'] = $tags['mentions'];
-
-	$return = [];
-	foreach ($item as $key => $value) {
-		$return[str_replace('-', '_', $key)] = $value;
-	}
+	$return = advancedcontentfilter_get_filter_fields(advancedcontentfilter_prepare_item_row($item_row));
 
 	return json_encode(['variables' => str_replace('\\\'', '\'', var_export($return, true))]);
+}
+
+/**
+ * This mimimcs the processing performed in Model\Item::prepareBody
+ *
+ * @param array $item_row
+ * @return array
+ * @throws HTTPException\InternalServerErrorException
+ * @throws ImagickException
+ */
+function advancedcontentfilter_prepare_item_row(array $item_row): array
+{
+	$tags = Tag::populateFromItem($item_row);
+
+	$item_row['tags'] = $tags['tags'];
+	$item_row['hashtags'] = $tags['hashtags'];
+	$item_row['mentions'] = $tags['mentions'];
+	$item_row['attachments'] = Post\Media::splitAttachments($item_row['uri-id']);
+
+	return $item_row;
 }
