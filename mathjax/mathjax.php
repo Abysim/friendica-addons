@@ -20,37 +20,41 @@ function mathjax_install()
 	Hook::register('addon_settings_post', __FILE__, 'mathjax_settings_post');
 }
 
-function mathjax_settings_post($a)
+function mathjax_settings_post()
 {
-	if (!local_user() || empty($_POST['mathjax-submit'])) {
+	if (!DI::userSession()->getLocalUserId() || empty($_POST['mathjax-submit'])) {
 		return;
 	}
 
-	DI::pConfig()->set(local_user(), 'mathjax', 'use', intval($_POST['mathjax_use']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'mathjax', 'use', intval($_POST['mathjax_use']));
 }
 
-function mathjax_settings(App $a, &$s)
+function mathjax_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$use = DI::pConfig()->get(local_user(), 'mathjax', 'use', false);
+	$use = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'mathjax', 'use', false);
 
 	$tpl = Renderer::getMarkupTemplate('settings.tpl', 'addon/mathjax');
-	$s .= Renderer::replaceMacros($tpl, [
-		'$title'        => 'MathJax',
+	$html = Renderer::replaceMacros($tpl, [
 		'$description'  => DI::l10n()->t('The MathJax addon renders mathematical formulae written using the LaTeX syntax surrounded by the usual $$ or an eqnarray block in the postings of your wall,network tab and private mail.'),
 		'$mathjax_use'  => ['mathjax_use', DI::l10n()->t('Use the MathJax renderer'), $use, ''],
-		'$savesettings' => DI::l10n()->t('Save Settings'),
 	]);
+
+	$data = [
+		'addon' => 'mathjax',
+		'title' => 'MathJax',
+		'html'  => $html,
+	];
 }
 
-function mathjax_footer(App $a, &$b)
+function mathjax_footer(string &$body)
 {
 	//  if the visitor of the page is not a local_user, use MathJax
 	//  otherwise check the users settings.
-	if (!local_user() || DI::pConfig()->get(local_user(), 'mathjax', 'use', false)) {
+	if (!DI::userSession()->getLocalUserId() || DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'mathjax', 'use', false)) {
 		DI::page()->registerFooterScript(__DIR__ . '/asset/MathJax.js?config=TeX-MML-AM_CHTML');
 		DI::page()->registerFooterScript(__DIR__ . '/mathjax.js');
 	}

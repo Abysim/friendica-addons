@@ -1,0 +1,15 @@
+MODULE=fancybox
+
+cd ..
+
+# old releases not needed anymore
+mkdir -p $MODULE/dist
+rm $MODULE/dist/*
+
+# create release for actual version
+zip -r9 $MODULE/dist/release.zip $MODULE/* -x $MODULE/dist/\* -x $MODULE/test/\* $MODULE/createrelease
+
+echo dist/release.zip created.
+
+cd $MODULE
+

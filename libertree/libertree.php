@@ -10,8 +10,10 @@ use Friendica\App;
 use Friendica\Content\Text\BBCode;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
+use Friendica\Core\Renderer;
 use Friendica\Database\DBA;
 use Friendica\DI;
+use Friendica\Model\Post;
 
 function libertree_install()
 {
@@ -23,99 +25,65 @@ function libertree_install()
 	Hook::register('connector_settings_post', 'addon/libertree/libertree.php', 'libertree_settings_post');
 }
 
-function libertree_jot_nets(App &$a, array &$jotnets_fields)
+function libertree_jot_nets(array &$jotnets_fields)
 {
-    if(! local_user()) {
-        return;
-    }
+	if (!DI::userSession()->getLocalUserId()) {
+		return;
+	}
 
-	if (DI::pConfig()->get(local_user(), 'libertree', 'post')) {
+	if (DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'libertree', 'post')) {
 		$jotnets_fields[] = [
 			'type' => 'checkbox',
 			'field' => [
 				'libertree_enable',
 				DI::l10n()->t('Post to libertree'),
-				DI::pConfig()->get(local_user(), 'libertree', 'post_by_default')
-			]
+				DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'libertree', 'post_by_default'),
+			],
 		];
 	}
 }
 
+function libertree_settings(array &$data)
+{
+	if (!DI::userSession()->getLocalUserId()) {
+		return;
+	}
 
-function libertree_settings(&$a,&$s) {
+	$enabled         = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'libertree', 'post', false);
+	$ltree_api_token = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'libertree', 'libertree_api_token');
+	$ltree_url       = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'libertree', 'libertree_url');
+	$def_enabled     = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'libertree', 'post_by_default');
 
-    if(! local_user())
-        return;
+	$t    = Renderer::getMarkupTemplate('connector_settings.tpl', 'addon/libertree/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled'         => ['libertree', DI::l10n()->t('Enable Libertree Post Addon'), $enabled],
+		'$ltree_url'       => ['libertree_url', DI::l10n()->t('Libertree site URL'), $ltree_url],
+		'$ltree_api_token' => ['libertree_api_token', DI::l10n()->t('Libertree API token'), $ltree_api_token],
+		'$bydefault'       => ['ij_bydefault', DI::l10n()->t('Post to Libertree by default'), $def_enabled],
+	]);
 
-    /* Add our stylesheet to the page so we can make our settings look nice */
-
-    DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/libertree/libertree.css' . '" media="all" />' . "\r\n";
-
-    /* Get the current state of our config variables */
-
-    $enabled = DI::pConfig()->get(local_user(),'libertree','post');
-    $checked = (($enabled) ? ' checked="checked" ' : '');
-    $css = (($enabled) ? '' : '-disabled');
-
-    $def_enabled = DI::pConfig()->get(local_user(),'libertree','post_by_default');
-
-    $def_checked = (($def_enabled) ? ' checked="checked" ' : '');
-
-    $ltree_api_token = DI::pConfig()->get(local_user(), 'libertree', 'libertree_api_token');
-    $ltree_url = DI::pConfig()->get(local_user(), 'libertree', 'libertree_url');
-
-
-    /* Add some HTML to the existing form */
-
-    $s .= '<span id="settings_libertree_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_libertree_expanded\'); openClose(\'settings_libertree_inflated\');">';
-    $s .= '<img class="connector'.$css.'" src="images/libertree.png" /><h3 class="connector">'. DI::l10n()->t('libertree Export').'</h3>';
-    $s .= '</span>';
-    $s .= '<div id="settings_libertree_expanded" class="settings-block" style="display: none;">';
-    $s .= '<span class="fakelink" onclick="openClose(\'settings_libertree_expanded\'); openClose(\'settings_libertree_inflated\');">';
-    $s .= '<img class="connector'.$css.'" src="images/libertree.png" /><h3 class="connector">'. DI::l10n()->t('libertree Export').'</h3>';
-    $s .= '</span>';
-
-    $s .= '<div id="libertree-enable-wrapper">';
-    $s .= '<label id="libertree-enable-label" for="libertree-checkbox">' . DI::l10n()->t('Enable Libertree Post Addon') . '</label>';
-    $s .= '<input id="libertree-checkbox" type="checkbox" name="libertree" value="1" ' . $checked . '/>';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="libertree-api_token-wrapper">';
-    $s .= '<label id="libertree-api_token-label" for="libertree-api_token">' . DI::l10n()->t('Libertree API token') . '</label>';
-    $s .= '<input id="libertree-api_token" type="text" name="libertree_api_token" value="' . $ltree_api_token . '" />';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="libertree-url-wrapper">';
-    $s .= '<label id="libertree-url-label" for="libertree-url">' . DI::l10n()->t('Libertree site URL') . '</label>';
-    $s .= '<input id="libertree-url" type="text" name="libertree_url" value="' . $ltree_url . '" />';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="libertree-bydefault-wrapper">';
-    $s .= '<label id="libertree-bydefault-label" for="libertree-bydefault">' . DI::l10n()->t('Post to Libertree by default') . '</label>';
-    $s .= '<input id="libertree-bydefault" type="checkbox" name="libertree_bydefault" value="1" ' . $def_checked . '/>';
-    $s .= '</div><div class="clear"></div>';
-
-    /* provide a submit button */
-
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="libertree-submit" name="libertree-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div></div>';
-
+	$data = [
+		'connector' => 'libertree',
+		'title'     => DI::l10n()->t('Libertree Export'),
+		'image'     => 'images/libertree.png',
+		'enabled'   => $enabled,
+		'html'      => $html,
+	];
 }
 
-
-function libertree_settings_post(&$a,&$b) {
-
-	if(!empty($_POST['libertree-submit'])) {
-
-		DI::pConfig()->set(local_user(),'libertree','post',intval($_POST['libertree']));
-		DI::pConfig()->set(local_user(),'libertree','post_by_default',intval($_POST['libertree_bydefault']));
-		DI::pConfig()->set(local_user(),'libertree','libertree_api_token',trim($_POST['libertree_api_token']));
-		DI::pConfig()->set(local_user(),'libertree','libertree_url',trim($_POST['libertree_url']));
+function libertree_settings_post(array &$b)
+{
+	if (!empty($_POST['libertree-submit'])) {
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(),'libertree','post',intval($_POST['libertree']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(),'libertree','post_by_default',intval($_POST['libertree_bydefault']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(),'libertree','libertree_api_token',trim($_POST['libertree_api_token']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(),'libertree','libertree_url',trim($_POST['libertree_url']));
 
 	}
 
 }
 
-function libertree_hook_fork(App &$a, array &$b)
+function libertree_hook_fork(array &$b)
 {
 	if ($b['name'] != 'notifier_normal') {
 		return;
@@ -130,7 +98,8 @@ function libertree_hook_fork(App &$a, array &$b)
 	}
 }
 
-function libertree_post_local(&$a,&$b) {
+function libertree_post_local(array &$b)
+{
 
 	// This can probably be changed to allow editing by pointing to a different API endpoint
 
@@ -138,7 +107,7 @@ function libertree_post_local(&$a,&$b) {
 		return;
 	}
 
-	if ((! local_user()) || (local_user() != $b['uid'])) {
+	if (!DI::userSession()->getLocalUserId() || (DI::userSession()->getLocalUserId() != $b['uid'])) {
 		return;
 	}
 
@@ -146,11 +115,11 @@ function libertree_post_local(&$a,&$b) {
 		return;
 	}
 
-	$ltree_post   = intval(DI::pConfig()->get(local_user(),'libertree','post'));
+	$ltree_post   = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(),'libertree','post'));
 
 	$ltree_enable = (($ltree_post && !empty($_REQUEST['libertree_enable'])) ? intval($_REQUEST['libertree_enable']) : 0);
 
-	if ($b['api_source'] && intval(DI::pConfig()->get(local_user(),'libertree','post_by_default'))) {
+	if ($b['api_source'] && intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(),'libertree','post_by_default'))) {
 		$ltree_enable = 1;
 	}
 
@@ -165,12 +134,9 @@ function libertree_post_local(&$a,&$b) {
 	$b['postopts'] .= 'libertree';
 }
 
-
-
-
-function libertree_send(&$a,&$b) {
-
-	Logger::log('libertree_send: invoked');
+function libertree_send(array &$b)
+{
+	Logger::notice('libertree_send: invoked');
 
 	if ($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited'])) {
 		return;
@@ -191,10 +157,12 @@ function libertree_send(&$a,&$b) {
 		return;
 	}
 
+	$b['body'] = Post\Media::addAttachmentsToBody($b['uri-id'], DI::contentItem()->addSharedPost($b));
+
 	$ltree_api_token = DI::pConfig()->get($b['uid'],'libertree','libertree_api_token');
 	$ltree_url = DI::pConfig()->get($b['uid'],'libertree','libertree_url');
 	$ltree_blog = "$ltree_url/api/v1/posts/create/?token=$ltree_api_token";
-	$ltree_source = DI::baseUrl()->getHostname();
+	$ltree_source = DI::baseUrl()->getHost();
 
 	if ($b['app'] != "")
 		$ltree_source .= " (".$b['app'].")";
@@ -215,15 +183,16 @@ function libertree_send(&$a,&$b) {
 		// remove multiple newlines
 		do {
 			$oldbody = $body;
-                        $body = str_replace("\n\n\n", "\n\n", $body);
-                } while ($oldbody != $body);
+			$body = str_replace("\n\n\n", "\n\n", $body);
+		} while ($oldbody != $body);
 
 		// convert to markdown
 		$body = BBCode::toMarkdown($body, false);
 
 		// Adding the title
-		if(strlen($title))
-			$body = "## ".html_entity_decode($title)."\n\n".$body;
+		if (strlen($title)) {
+			$body = '## ' . html_entity_decode($title) . "\n\n" . $body;
+		}
 
 
 		$params = [
@@ -232,7 +201,7 @@ function libertree_send(&$a,&$b) {
 		//	'token' => $ltree_api_token
 		];
 
-		$result = DI::httpRequest()->post($ltree_blog, $params)->getBody();
-		Logger::log('libertree: ' . $result);
+		$result = DI::httpClient()->post($ltree_blog, $params)->getBody();
+		Logger::notice('libertree: ' . $result);
 	}
 }

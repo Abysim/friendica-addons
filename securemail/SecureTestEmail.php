@@ -23,8 +23,10 @@ namespace Friendica\Addon\securemail;
 
 use Friendica\App;
 use Friendica\App\BaseURL;
-use Friendica\Core\Config\IConfig;
-use Friendica\Core\PConfig\IPConfig;
+use Friendica\Core\Config\Capability\IManageConfigValues;
+use Friendica\Core\PConfig\Capability\IManagePersonalConfigValues;
+use Friendica\DI;
+use Friendica\Model\User;
 use Friendica\Object\Email;
 
 /**
@@ -32,11 +34,11 @@ use Friendica\Object\Email;
  */
 class SecureTestEmail extends Email
 {
-	public function __construct(App $a, IConfig $config, IPConfig $pConfig, BaseURL $baseUrl)
+	public function __construct(IManageConfigValues $config, IManagePersonalConfigValues $pConfig, BaseURL $baseUrl)
 	{
 		$sitename = $config->get('config', 'sitename');
 
-		$hostname = $baseUrl->getHostname();
+		$hostname = $baseUrl->getHost();
 		if (strpos($hostname, ':')) {
 			$hostname = substr($hostname, 0, strpos($hostname, ':'));
 		}
@@ -46,14 +48,16 @@ class SecureTestEmail extends Email
 			$sender_email = 'noreply@' . $hostname;
 		}
 
+		$user = User::getById(DI::userSession()->getLocalUserId());
+
 		$subject = 'Friendica - Secure Mail - Test';
 		$message = 'This is a test message from your Friendica Secure Mail addon.';
 
 		// enable addon for test
-		$pConfig->set(local_user(), 'securemail', 'enable', 1);
+		$pConfig->set(DI::userSession()->getLocalUserId(), 'securemail', 'enable', 1);
 
-		parent::__construct($sitename, $sender_email, $sender_email, $a->user['email'],
+		parent::__construct($sitename, $sender_email, $sender_email, $user['email'],
 			$subject, "<p>{$message}</p>", $message,
-			[], local_user());
+			[], DI::userSession()->getLocalUserId());
 	}
 }

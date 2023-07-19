@@ -16,41 +16,53 @@ use Friendica\Database\DBA;
 use Friendica\DI;
 use Friendica\Model\Profile;
 use Friendica\Model\User;
-use Friendica\Util\Strings;
+
+global $forumdirectory_search;
 
 function forumdirectory_install()
 {
 	Hook::register('app_menu', 'addon/forumdirectory/forumdirectory.php', 'forumdirectory_app_menu');
 }
 
-function forumdirectory_module()
-{
-	return;
-}
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
+function forumdirectory_module() {}
 
-function forumdirectory_app_menu(App $a, array &$b)
+function forumdirectory_app_menu(array &$b)
 {
 	$b['app_menu'][] = '<div class="app-title"><a href="forumdirectory">' . DI::l10n()->t('Forum Directory') . '</a></div>';
 }
 
-function forumdirectory_init(App $a)
+function forumdirectory_init()
 {
-	if (local_user()) {
+	if (DI::userSession()->getLocalUserId()) {
 		DI::page()['aside'] .= Widget::findPeople();
 	}
 }
 
-function forumdirectory_post(App $a)
+function forumdirectory_post()
 {
+	global $forumdirectory_search;
+
 	if (!empty($_POST['search'])) {
-		$a->data['search'] = $_POST['search'];
+		$forumdirectory_search = $_POST['search'];
 	}
 }
 
-function forumdirectory_content(App $a)
+function forumdirectory_content()
 {
-	if ((DI::config()->get('system', 'block_public')) && (!local_user()) && (!remote_user())) {
-		notice(DI::l10n()->t('Public access denied.') . EOL);
+	global $forumdirectory_search;
+
+	if (DI::config()->get('system', 'block_public') && !DI::userSession()->getLocalUserId() && !DI::userSession()->getRemoteUserId()) {
+		DI::sysmsg()->addNotice(DI::l10n()->t('Public access denied.'));
 		return;
 	}
 
@@ -59,10 +71,10 @@ function forumdirectory_content(App $a)
 
 	Nav::setSelected('directory');
 
-	if (!empty($a->data['search'])) {
-		$search = Strings::escapeTags(trim($a->data['search']));
+	if (!empty($forumdirectory_search)) {
+		$search = trim($forumdirectory_search);
 	} else {
-		$search = (!empty($_GET['search']) ? Strings::escapeTags(trim(rawurldecode($_GET['search']))) : '');
+		$search = (!empty($_GET['search']) ? trim(rawurldecode($_GET['search'])) : '');
 	}
 
 	$gdirpath = '';
@@ -111,7 +123,7 @@ function forumdirectory_content(App $a)
 	);
 
 	if (DBA::isResult($r)) {
-		if (in_array('small', $a->argv)) {
+		if (in_array('small', DI::args()->getArgv())) {
 			$photo = 'thumb';
 		} else {
 			$photo = 'photo';
@@ -122,7 +134,7 @@ function forumdirectory_content(App $a)
 		}
 		DBA::close($r);
 	} else {
-		notice(DI::l10n()->t("No entries \x28some entries may be hidden\x29."));
+		DI::sysmsg()->addNotice(DI::l10n()->t("No entries \x28some entries may be hidden\x29."));
 	}
 
 	$tpl = Renderer::getMarkupTemplate('directory_header.tpl');

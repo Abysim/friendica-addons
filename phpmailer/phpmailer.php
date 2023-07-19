@@ -11,7 +11,7 @@ use Friendica\App;
 use Friendica\Core\Hook;
 use Friendica\DI;
 use Friendica\Object\EMail\IEmail;
-use Friendica\Util\ConfigFileLoader;
+use Friendica\Core\Config\Util\ConfigFileManager;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -20,19 +20,18 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'a
 function phpmailer_install()
 {
 	Hook::register('load_config'         , __FILE__, 'phpmailer_load_config');
-	Hook::register('emailer_send_prepare', __FILE__, 'phpmailer_emailer_send_prepare');
+	Hook::register('emailer_send_prepare', __FILE__, 'phpmailer_emailer_send_prepare', 5);
 }
 
-function phpmailer_load_config(App $a, ConfigFileLoader $loader)
+function phpmailer_load_config(ConfigFileManager $loader)
 {
-	$a->getConfigCache()->load($loader->loadAddonConfig('phpmailer'));
+	DI::app()->getConfigCache()->load($loader->loadAddonConfig('phpmailer'), \Friendica\Core\Config\ValueObject\Cache::SOURCE_STATIC);
 }
 
 /**
- * @param App $a
  * @param IEmail $email
  */
-function phpmailer_emailer_send_prepare(App $a, IEmail &$email)
+function phpmailer_emailer_send_prepare(IEmail &$email)
 {
 	// Passing `true` enables exceptions
 	$mailer = new PHPMailer(true);

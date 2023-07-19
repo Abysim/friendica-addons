@@ -15,17 +15,22 @@ use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\DI;
 
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
 function notifyall_module() {}
 
-function notifyall_addon_admin(App $a, &$o)
+function notifyall_addon_admin(string &$o)
 {
-	$o = '<div></div>&nbsp;&nbsp;&nbsp;&nbsp;<a href="' . DI::baseUrl()->get() . '/notifyall">' . DI::l10n()->t('Send email to all members') . '</a></br/>';
+	$o = '<div></div>&nbsp;&nbsp;&nbsp;&nbsp;<a href="' . DI::baseUrl() . '/notifyall">' . DI::l10n()->t('Send email to all members') . '</a></br/>';
 }
 
 
-function notifyall_post(App $a)
+function notifyall_post()
 {
-	if(!is_site_admin()) {
+	if (!DI::userSession()->isSiteAdmin()) {
 		return;
 	}
 
@@ -35,18 +40,20 @@ function notifyall_post(App $a)
 		return;
 	}
 
+	$condition = ['account_removed' => false, 'account_expired' => false];
+
 	// if this is a test, send it only to the admin(s)
 	// admin_email might be a comma separated list, but we need "a@b','c@d','e@f
 	if (intval($_REQUEST['test'])) {
-		$email = DI::config()->get('config', 'admin_email');
-		$email = "'" . str_replace([" ",","], ["","','"], $email) . "'";
-	}
-	$sql_extra = ((intval($_REQUEST['test'])) ? sprintf(" AND `email` in ( %s )", $email) : '');
+		$adminEmails = \Friendica\Model\User::getAdminListForEmailing(['email']);
 
-	$recipients = DBA::p("SELECT DISTINCT `email` FROM `user` WHERE `verified` AND NOT `account_removed` AND NOT `account_expired` $sql_extra");
+		$condition['email'] = array_column($adminEmails, 'email');
+	}
+
+	$recipients = DBA::p("SELECT DISTINCT `email` FROM `user`" . DBA::buildCondition($condition), $condition);
 
 	if (! $recipients) {
-		notice(DI::l10n()->t('No recipients found.') . EOL);
+		DI::sysmsg()->addNotice(DI::l10n()->t('No recipients found.'));
 		return;
 	}
 
@@ -56,13 +63,13 @@ function notifyall_post(App $a)
 		DI::emailer()->send($notifyEmail->withRecipient($recipient['email']));
 	}
 
-	info(DI::l10n()->t('Emails sent'));
+	DI::sysmsg()->addInfo(DI::l10n()->t('Emails sent'));
 	DI::baseUrl()->redirect('admin');
 }
 
-function notifyall_content(&$a)
+function notifyall_content()
 {
-	if (! is_site_admin()) {
+	if (!DI::userSession()->isSiteAdmin()) {
 		return '';
 	}
 

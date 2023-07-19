@@ -17,33 +17,37 @@ function markdown_install() {
 	Hook::register('addon_settings_post',   __FILE__, 'markdown_addon_settings_post');
 }
 
-function markdown_addon_settings(App $a, &$s)
+function markdown_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$enabled = intval(DI::pConfig()->get(local_user(), 'markdown', 'enabled'));
+	$enabled = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'markdown', 'enabled'));
 
-	$t = Renderer::getMarkupTemplate('settings.tpl', 'addon/markdown/');
-	$s .= Renderer::replaceMacros($t, [
-		'$title'   => DI::l10n()->t('Markdown'),
-		'$enabled' => ['enabled', DI::l10n()->t('Enable Markdown parsing'), $enabled, DI::l10n()->t('If enabled, self created items will additionally be parsed via Markdown.')],
-		'$submit'  => DI::l10n()->t('Save Settings'),
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/markdown/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled' => ['enabled', DI::l10n()->t('Enable Markdown parsing'), $enabled, DI::l10n()->t('If enabled, adds Markdown support to the Compose Post form.')],
 	]);
+
+	$data = [
+		'addon' => 'markdown',
+		'title' => DI::l10n()->t('Markdown Settings'),
+		'html'  => $html,
+	];
 }
 
-function markdown_addon_settings_post(App $a, &$b)
+function markdown_addon_settings_post(array &$b)
 {
-	if (!local_user() || empty($_POST['markdown-submit'])) {
+	if (!DI::userSession()->getLocalUserId() || empty($_POST['markdown-submit'])) {
 		return;
 	}
 
-	DI::pConfig()->set(local_user(), 'markdown', 'enabled', intval($_POST['enabled']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'markdown', 'enabled', intval($_POST['enabled']));
 }
 
-function markdown_post_local_start(App $a, &$request) {
-	if (empty($request['body']) || !DI::pConfig()->get(local_user(), 'markdown', 'enabled')) {
+function markdown_post_local_start(&$request) {
+	if (empty($request['body']) || !DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'markdown', 'enabled')) {
 		return;
 	}
 
@@ -56,6 +60,11 @@ function markdown_post_local_start(App $a, &$request) {
 			// Escape mentions which username can contain Markdown-like characters
 			// See https://github.com/friendica/friendica/issues/9486
 			return \Friendica\Util\Strings::performWithEscapedBlocks($body, '/[@!][^@\s]+@[^\s]+\w/', function ($text) {
+				// Markdown accepts literal HTML but we do not in post body, so we need to escape left chevrons
+				// (right chevrons are used for quoting in Markdown)
+				// See https://github.com/friendica/friendica/issues/10634
+				$text = strtr($text, ['<' => '&lt;']);
+
 				return Markdown::toBBCode($text);
 			});
 		}

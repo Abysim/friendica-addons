@@ -17,15 +17,13 @@ function pageheader_install() {
     Hook::register('page_content_top', __FILE__, 'pageheader_fetch');
 }
 
-function pageheader_addon_admin(App &$a, &$s)
+function pageheader_addon_admin(string &$s)
 {
-	if(! is_site_admin()) {
+	if (!DI::userSession()->isSiteAdmin()) {
 		return;
 	}
 
-    /* Add our stylesheet to the page so we can make our settings look nice */
-	$stylesheetPath = __DIR__ . '/pageheader.css';
-	DI::page()->registerStylesheet($stylesheetPath);
+	DI::page()->registerStylesheet(__DIR__ . '/pageheader.css');
 
 	$words = DI::config()->get('pageheader','text');
 	if(! $words)
@@ -41,9 +39,9 @@ function pageheader_addon_admin(App &$a, &$s)
 	return;
 }
 
-function pageheader_addon_admin_post(App $a)
+function pageheader_addon_admin_post()
 {
-	if(!is_site_admin()) {
+	if (!DI::userSession()->isSiteAdmin()) {
 		return;
 	}
 
@@ -54,18 +52,17 @@ function pageheader_addon_admin_post(App $a)
 	}
 }
 
-function pageheader_fetch(App $a, &$b)
+function pageheader_fetch(string &$b)
 {
-	if(file_exists('pageheader.html')){
+	if (file_exists('pageheader.html')) {
 		$s = file_get_contents('pageheader.html');
 	} else {
 		$s = DI::config()->get('pageheader', 'text');
 	}
 
-	$stylesheetPath = __DIR__ .'/pageheader.css';
-	DI::page()->registerStylesheet($stylesheetPath);
-    
-    if ($s) {
-        $b .= '<div class="pageheader">' . $s . '</div>';
-    }
+	DI::page()->registerStylesheet(__DIR__ .'/pageheader.css');
+
+	if ($s) {
+		$b .= '<div class="pageheader">' . $s . '</div>';
+	}
 }

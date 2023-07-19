@@ -1,0 +1,54 @@
+# ADDON birdavatar
+# Copyright (C) 
+# This file is distributed under the same license as the Friendica birdavatar addon package.
+# 
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-11-24 08:50-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: birdavatar.php:47
+msgid "Set default profile avatar or randomize the bird."
+msgstr ""
+
+#: birdavatar.php:52
+msgid "Bird Avatar Settings"
+msgstr ""
+
+#: birdavatar.php:55
+msgid "Use Bird as Avatar"
+msgstr ""
+
+#: birdavatar.php:56
+msgid "More Random Bird!"
+msgstr ""
+
+#: birdavatar.php:57
+msgid "Reset to email Bird"
+msgstr ""
+
+#: birdavatar.php:76
+msgid "The bird has not found itself."
+msgstr ""
+
+#: birdavatar.php:85
+msgid "There was an error, the bird flew away."
+msgstr ""
+
+#: birdavatar.php:91
+msgid "Profile Photos"
+msgstr ""
+
+#: birdavatar.php:101
+msgid "Meow!"
+msgstr ""

@@ -7,7 +7,10 @@
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
  *
  */
+
+use Friendica\App;
 use Friendica\Core\Hook;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 
 function nsfw_install()
@@ -48,67 +51,66 @@ function nsfw_extract_photos($body)
 	return $new_body;
 }
 
-function nsfw_addon_settings(&$a, &$s)
+function nsfw_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
+	$enabled = !DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'nsfw', 'disable');
+	$words   = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'nsfw', 'words', 'nsfw,');
 
-	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/nsfw/nsfw.css' . '" media="all" />' . "\r\n";
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/nsfw/');
+	$html = Renderer::replaceMacros($t, [
+		'$info'    => DI::l10n()->t('This addon searches for specified words/text in posts and collapses them. It can be used to filter content tagged with for instance #NSFW that may be deemed inappropriate at certain times or places, such as being at work. It is also useful for hiding irrelevant or annoying content from direct view.'),
+		'$enabled' => ['nsfw-enable', DI::l10n()->t('Enable Content filter'), $enabled],
+		'$words'   => ['nsfw-words', DI::l10n()->t('Comma separated list of keywords to hide'), $words, DI::l10n()->t('Use /expression/ to provide regular expressions, #tag to specfically match hashtags (case-insensitive), or regular words (case-sensitive)')],
+	]);
 
-	$enable_checked = (intval(DI::pConfig()->get(local_user(), 'nsfw', 'disable')) ? '' : ' checked="checked" ');
-	$words = DI::pConfig()->get(local_user(), 'nsfw', 'words');
-	if (!$words) {
-		$words = 'nsfw,';
-	}
-
-	$s .= '<span id="settings_nsfw_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_nsfw_expanded\'); openClose(\'settings_nsfw_inflated\');">';
-	$s .= '<h3>' . DI::l10n()->t('Content Filter (NSFW and more)') . '</h3>';
-	$s .= '</span>';
-	$s .= '<div id="settings_nsfw_expanded" class="settings-block" style="display: none;">';
-	$s .= '<span class="fakelink" onclick="openClose(\'settings_nsfw_expanded\'); openClose(\'settings_nsfw_inflated\');">';
-	$s .= '<h3>' . DI::l10n()->t('Content Filter (NSFW and more)') . '</h3>';
-	$s .= '</span>';
-
-	$s .= '<div id="nsfw-wrapper">';
-	$s .= '<p>' . DI::l10n()->t('This addon searches for specified words/text in posts and collapses them. It can be used to filter content tagged with for instance #NSFW that may be deemed inappropriate at certain times or places, such as being at work. It is also useful for hiding irrelevant or annoying content from direct view.') . '</p>';
-	$s .= '<label id="nsfw-enable-label" for="nsfw-enable">' . DI::l10n()->t('Enable Content filter') . ' </label>';
-	$s .= '<input id="nsfw-enable" type="checkbox" name="nsfw-enable" value="1"' . $enable_checked . ' />';
-	$s .= '<div class="clear"></div>';
-	$s .= '<label id="nsfw-label" for="nsfw-words">' . DI::l10n()->t('Comma separated list of keywords to hide') . ' </label>';
-	$s .= '<textarea id="nsfw-words" type="text" name="nsfw-words">' . $words . '</textarea>';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="nsfw-submit" name="nsfw-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div>';
-	$s .= '<div class="nsfw-desc">' . DI::l10n()->t('Use /expression/ to provide regular expressions') . '</div></div>';
-	return;
+	$data = [
+		'addon' => 'nsfw',
+		'title' => DI::l10n()->t('Content Filter (NSFW and more)'),
+		'html'  => $html,
+	];
 }
 
-function nsfw_addon_settings_post(&$a, &$b)
+function nsfw_addon_settings_post(array &$b)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
 	if (!empty($_POST['nsfw-submit'])) {
-		DI::pConfig()->set(local_user(), 'nsfw', 'words', trim($_POST['nsfw-words']));
-		$enable = (!empty($_POST['nsfw-enable']) ? intval($_POST['nsfw-enable']) : 0);
+		$enable = !empty($_POST['nsfw-enable']) ? intval($_POST['nsfw-enable']) : 0;
 		$disable = 1 - $enable;
-		DI::pConfig()->set(local_user(), 'nsfw', 'disable', $disable);
+
+		$words = trim($_POST['nsfw-words']);
+		$word_list = explode(',', $words);
+		foreach ($word_list as $word) {
+			$word = trim($word);
+			if (!$words || $word[0] != '/') {
+				continue;
+			}
+
+			if (@preg_match($word, '') === false) {
+				DI::sysmsg()->addNotice(DI::l10n()->t('Regular expression "%s" fails to compile', $word));
+			};
+		}
+
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'nsfw', 'words', $words);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'nsfw', 'disable', $disable);
 	}
 }
 
-function nsfw_prepare_body_content_filter(\Friendica\App $a, &$hook_data)
+function nsfw_prepare_body_content_filter(&$hook_data)
 {
 	$words = null;
-	if (DI::pConfig()->get(local_user(), 'nsfw', 'disable')) {
+	if (DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'nsfw', 'disable')) {
 		return;
 	}
 
-	if (local_user()) {
-		$words = DI::pConfig()->get(local_user(), 'nsfw', 'words');
+	if (DI::userSession()->getLocalUserId()) {
+		$words = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'nsfw', 'words');
 	}
 
 	if ($words) {
@@ -130,14 +132,14 @@ function nsfw_prepare_body_content_filter(\Friendica\App $a, &$hook_data)
 			$tag_search = false;
 			switch ($word[0]) {
 				case '/'; // Regular expression
-					$found = preg_match($word, $body);
+					$found = @preg_match($word, $body);
 					break;
 				case '#': // Hashtag-only search
 					$tag_search = true;
 					$found = nsfw_find_word_in_item_tags($hook_data['item']['hashtags'], substr($word, 1));
 					break;
 				default:
-					$found = stripos($body, $word) !== false || nsfw_find_word_in_item_tags($hook_data['item']['tags'], $word);
+					$found = strpos($body, $word) !== false || nsfw_find_word_in_item_tags($hook_data['item']['tags'], $word);
 					break;
 			}
 

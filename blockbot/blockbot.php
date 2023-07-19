@@ -8,38 +8,41 @@
  *
  */
 
-use Friendica\App;
 use Friendica\Core\Hook;
-use Friendica\Core\System;
 use Friendica\DI;
 use Jaybizzle\CrawlerDetect\CrawlerDetect;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
+use Friendica\Network\HTTPException\ForbiddenException;
 
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
 
-function blockbot_install() {
+function blockbot_install()
+{
 	Hook::register('init_1', __FILE__, 'blockbot_init_1');
 }
 
-function blockbot_addon_admin(&$a, &$o) {
-	$t = Renderer::getMarkupTemplate("admin.tpl", "addon/blockbot/");
+function blockbot_addon_admin(string &$o)
+{
+	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/blockbot/');
 
 	$o = Renderer::replaceMacros($t, [
 		'$submit' => DI::l10n()->t('Save Settings'),
-		'$good_crawlers' => ['good_crawlers', DI::l10n()->t('Allow "good" crawlers'), DI::config()->get('blockbot', 'good_crawlers'), "Don't block fediverse crawlers, relay servers and other bots with good purposes."],
-		'$block_gab' => ['block_gab', DI::l10n()->t('Block GabSocial'), DI::config()->get('blockbot', 'block_gab'), 'Block the software GabSocial. This will block every access for that software. You can block dedicated gab instances in the blocklist settings in the admin section.'],
-		'$training' => ['training', DI::l10n()->t('Training mode'), DI::config()->get('blockbot', 'training'), "Activates the training mode. This is only meant for developing purposes. Don't activate this on a production machine. This can cut communication with some systems."],
+		'$good_crawlers' => ['good_crawlers', DI::l10n()->t('Allow "good" crawlers'), DI::config()->get('blockbot', 'good_crawlers'), DI::l10n()->t("Don't block fediverse crawlers, relay servers and other bots with good purposes.")],
+		'$block_gab' => ['block_gab', DI::l10n()->t('Block GabSocial'), DI::config()->get('blockbot', 'block_gab'), DI::l10n()->t('Block the software GabSocial. This will block every access for that software. You can block dedicated gab instances in the blocklist settings in the admin section.')],
+		'$training' => ['training', DI::l10n()->t('Training mode'), DI::config()->get('blockbot', 'training'), DI::l10n()->t("Activates the training mode. This is only meant for developing purposes. Don't activate this on a production machine. This can cut communication with some systems.")],
 	]);
 }
 
-function blockbot_addon_admin_post(&$a) {
+function blockbot_addon_admin_post()
+{
 	DI::config()->set('blockbot', 'good_crawlers', $_POST['good_crawlers'] ?? false);
 	DI::config()->set('blockbot', 'block_gab', $_POST['block_gab'] ?? false);
 	DI::config()->set('blockbot', 'training', $_POST['training'] ?? false);
 }
 
-function blockbot_init_1(App $a) {
+function blockbot_init_1()
+{
 	if (empty($_SERVER['HTTP_USER_AGENT'])) {
 		return;
 	}
@@ -47,17 +50,20 @@ function blockbot_init_1(App $a) {
 	$logdata = ['agent' => $_SERVER['HTTP_USER_AGENT'], 'uri' => $_SERVER['REQUEST_URI']];
 
 	// List of "good" crawlers
-	$good_agents = ['fediverse.space crawler', 'fediverse.network crawler', 'Active_Pods_CheckBot_3.0',
+	$good_agents = [
+		'fediverse.space crawler', 'fediverse.network crawler', 'Active_Pods_CheckBot_3.0',
 		'Social-Relay/', 'Test Certificate Info', 'Uptimebot/', 'GNUSocialBot', 'UptimeRobot/',
-		'PTST/'];
+		'PTST/', 'Zabbix', 'Poduptime/'
+	];
 
 	// List of known crawlers.
-	$agents = ['SemrushBot', 's~feedly-nikon3', 'Qwantify/Bleriot/', 'ltx71', 'Sogou web spider/',
+	$agents = [
+		'SemrushBot', 's~feedly-nikon3', 'Qwantify/Bleriot/', 'ltx71', 'Sogou web spider/',
 		'Diffbot/', 'Twitterbot/', 'YisouSpider', 'evc-batch/', 'LivelapBot/', 'TrendsmapResolver/',
 		'PaperLiBot/', 'Nuzzel', 'um-LN/', 'Google Favicon', 'Datanyze', 'BLEXBot/', '360Spider',
 		'adscanner/', 'HeadlessChrome', 'wpif', 'startmebot/', 'Googlebot/', 'Applebot/',
 		'facebookexternalhit/', 'GoogleImageProxy', 'bingbot/', 'heritrix/', 'ldspider',
-		'AwarioRssBot/', 'Zabbix', 'TweetmemeBot/', 'dcrawl/', 'PhantomJS/', 'Googlebot-Image/',
+		'AwarioRssBot/', 'TweetmemeBot/', 'dcrawl/', 'PhantomJS/', 'Googlebot-Image/',
 		'CrowdTanglebot/', 'Mediapartners-Google', 'Baiduspider/', 'datagnionbot',
 		'MegaIndex.ru/', 'SMUrlExpander', 'Hatena-Favicon/', 'Wappalyzer', 'FlipboardProxy/',
 		'NetcraftSurveyAgent/', 'Dataprovider.com', 'SMTBot/', 'Nimbostratus-Bot/',
@@ -73,7 +79,9 @@ function blockbot_init_1(App $a) {
 		'SummalyBot/', 'DNSResearchBot/', 'PetalBot;', 'Nmap Scripting Engine;',
 		'Google-Apps-Script; beanserver;', 'woorankreview/', 'Seekport Crawler;', 'AHC/',
 		'SkypeUriPreview Preview/', 'Semanticbot/', 'Embed PHP library', 'XoviOnpageCrawler;',
-		'GetHPinfo.com-Bot/', 'BoardReader Favicon Fetcher'];
+		'GetHPinfo.com-Bot/', 'BoardReader Favicon Fetcher', 'Google-Adwords-Instant', 'newspaper/',
+		'YurichevBot/', 'Crawling at Home Project', 'InfoTigerBot/'
+	];
 
 	if (!DI::config()->get('blockbot', 'good_crawlers')) {
 		$agents = array_merge($agents, $good_agents);
@@ -91,7 +99,7 @@ function blockbot_init_1(App $a) {
 
 	foreach ($agents as $agent) {
 		if (stristr($_SERVER['HTTP_USER_AGENT'], $agent)) {
-			System::httpExit(403, 'Bots are not allowed');
+			throw new ForbiddenException('Bots are not allowed');
 		}
 	}
 
@@ -108,13 +116,17 @@ function blockbot_init_1(App $a) {
 	}
 
 	// List of false positives' strings of known "good" agents.
-	$agents = ['curl', 'zgrab', 'Go-http-client', 'curb', 'github.com', 'reqwest', 'Feedly/',
+	$agents = [
+		'curl', 'zgrab', 'Go-http-client', 'curb', 'github.com', 'reqwest', 'Feedly/',
 		'Python-urllib/', 'Liferea/', 'aiohttp/', 'WordPress.com Reader', 'hackney/',
 		'Faraday v', 'okhttp', 'UniversalFeedParser', 'PixelFedBot', 'python-requests',
 		'WordPress/', 'http.rb/', 'Apache-HttpClient/', 'WordPress.com;', 'Pleroma',
 		'Dispatch/', 'Ruby', 'Java/', 'libwww-perl/', 'Mastodon/', 'FeedlyApp/',
 		'lua-resty-http/', 'Tiny Tiny RSS/', 'Wget/', 'PostmanRuntime/',
-		'W3C_Validator/', 'NetNewsWire', 'FeedValidator/', 'theoldreader.com'];
+		'W3C_Validator/', 'NetNewsWire', 'FeedValidator/', 'theoldreader.com', 'axios/',
+		'Paw/', 'PeerTube/', 'fedi.inex.dev', 'FediDB/', 'index.community crawler',
+		'Slackbot-LinkExpanding'
+	];
 
 	if (DI::config()->get('blockbot', 'good_crawlers')) {
 		$agents = array_merge($agents, $good_agents);
@@ -122,11 +134,11 @@ function blockbot_init_1(App $a) {
 
 	foreach ($agents as $agent) {
 		if (stristr($_SERVER['HTTP_USER_AGENT'], $agent)) {
-			logger::notice('False positive', $logdata);
+			logger::info('False positive', $logdata);
 			return;
 		}
 	}
 
-	logger::info('Blocked bot', $logdata);
-	System::httpExit(403, 'Bots are not allowed');
+	logger::notice('Blocked bot', $logdata);
+	throw new ForbiddenException('Bots are not allowed');
 }

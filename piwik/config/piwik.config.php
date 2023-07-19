@@ -1,7 +1,7 @@
 <?php
 
 // Warning: Don't change this file! It only holds the default config values for this addon.
-// Instead overwrite these config values in config/addon.config.php in your Friendica directory
+// Instead, copy this file to config/piwik.config.php in your Friendica directory and set the correct values there
 
 return [
 	'piwik' => [
@@ -25,5 +25,9 @@ return [
 		// async (Boolean)
 		// This defines whether or not to use asynchronous tracking so pages load (or appear to load) faster.
 		'async' => false,
+
+		// shortendpoint (Boolean)
+		// This defines whether or not to use a short path to the tracking script: "/js/" instead of "/piwik.js".
+		'shortendpoint' => false,
 	],
 ];

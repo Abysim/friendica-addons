@@ -7,7 +7,10 @@
  *         based upon NSFW from Mike Macgirvin <http://macgirvin.com/profile/mike>
  *
  */
+
+use Friendica\App;
 use Friendica\Core\Hook;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 use Friendica\Util\Strings;
 
@@ -18,54 +21,41 @@ function showmore_install()
 	Hook::register('addon_settings_post', 'addon/showmore/showmore.php', 'showmore_addon_settings_post');
 }
 
-function showmore_addon_settings(&$a, &$s)
+function showmore_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
+	DI::page()->registerStylesheet(__DIR__ . '/showmore.css', 'all');
 
-	DI::page()['htmlhead'] .= '<link rel="stylesheet" type="text/css" href="'.DI::baseUrl()->get().'/addon/showmore/showmore.css'.'" media="all"/>'."\r\n";
+	$enabled = !DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'showmore', 'disable');
+	$chars   = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'showmore', 'chars', 1100);
 
-	$enable_checked = (intval(DI::pConfig()->get(local_user(), 'showmore', 'disable')) ? '' : ' checked="checked"');
-	$chars = DI::pConfig()->get(local_user(), 'showmore', 'chars', 1100);
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/showmore/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled' => ['showmore-enable', DI::l10n()->t('Enable Show More'), $enabled],
+		'$chars'   => ['showmore-chars', DI::l10n()->t('Cutting posts after how many characters'), $chars],
+	]);
 
-	$s .= '<span id="settings_showmore_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_showmore_expanded\'); openClose(\'settings_showmore_inflated\');">';
-	$s .= '<h3>' . DI::l10n()->t('"Show more" Settings').'</h3>';
-	$s .= '</span>';
-	$s .= '<div id="settings_showmore_expanded" class="settings-block" style="display: none;">';
-	$s .= '<span class="fakelink" onclick="openClose(\'settings_showmore_expanded\'); openClose(\'settings_showmore_inflated\');">';
-	$s .= '<h3>' . DI::l10n()->t('"Show more" Settings').'</h3>';
-	$s .= '</span>';
-
-	$s .= '<div id="showmore-wrapper">';
-
-	$s .= '<label id="showmore-enable-label" for="showmore-enable">'.DI::l10n()->t('Enable Show More').'</label>';
-	$s .= '<input id="showmore-enable" type="checkbox" name="showmore-enable" value="1"'.$enable_checked.' />';
-	$s .= '<div class="clear"></div>';
-	$s .= '<label id="showmore-label" for="showmore-chars">'.DI::l10n()->t('Cutting posts after how much characters').' </label>';
-	$s .= '<input id="showmore-words" type="text" name="showmore-chars" value="'.$chars.'" />';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="showmore-submit" name="showmore-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div>';
-//	$s .= '<div class="showmore-desc">' . DI::l10n()->t('Use /expression/ to provide regular expressions') . '</div>';
-	$s .= '</div>';
-
-	return;
+	$data = [
+		'addon' => 'showmore',
+		'title' => DI::l10n()->t('"Show more" Settings'),
+		'html'  => $html,
+	];
 }
 
-function showmore_addon_settings_post(&$a, &$b)
+function showmore_addon_settings_post(array &$b)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
 	if (!empty($_POST['showmore-submit'])) {
-		DI::pConfig()->set(local_user(), 'showmore', 'chars', trim($_POST['showmore-chars']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'showmore', 'chars', trim($_POST['showmore-chars']));
 		$enable = (!empty($_POST['showmore-enable']) ? intval($_POST['showmore-enable']) : 0);
 		$disable = 1-$enable;
-		DI::pConfig()->set(local_user(), 'showmore', 'disable', $disable);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'showmore', 'disable', $disable);
 	}
 }
 
@@ -103,18 +93,18 @@ function get_body_length($body)
 	return strlen($string);
 }
 
-function showmore_prepare_body(\Friendica\App $a, &$hook_data)
+function showmore_prepare_body(&$hook_data)
 {
 	// No combination with content filters
 	if (!empty($hook_data['filter_reasons'])) {
 		return;
 	}
 
-	if (DI::pConfig()->get(local_user(), 'showmore', 'disable')) {
+	if (DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'showmore', 'disable')) {
 		return;
 	}
 
-	$chars = (int) DI::pConfig()->get(local_user(), 'showmore', 'chars', 1100);
+	$chars = (int) DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'showmore', 'chars', 1100);
 
 	if (get_body_length($hook_data['html']) > $chars) {
 		$found = true;
@@ -125,9 +115,9 @@ function showmore_prepare_body(\Friendica\App $a, &$hook_data)
 
 	if ($found) {
 		$rnd = Strings::getRandomHex(8);
-		$hook_data['html'] = '<span id="showmore-teaser-' . $rnd . '" class="showmore-teaser" style="display: block;" aria-hidden="true">' . $shortened . " " .
-			'<span id="showmore-wrap-' . $rnd . '" style="white-space:nowrap;" class="showmore-wrap fakelink" onclick="openClose(\'showmore-' . $rnd . '\'); openClose(\'showmore-teaser-' . $rnd . '\');" >' . DI::l10n()->t('show more') . '</span></span>' .
-			'<div id="showmore-' . $rnd . '" class="showmore-content" style="display: none;" aria-hidden="false">' . $hook_data['html'] . '</div>';
+		$hook_data['html'] = '<span id="showmore-teaser-' . $rnd . '" class="showmore-teaser" style="display: block;" aria-hidden="true" dir="auto">' . $shortened . " " .
+			'<span id="showmore-wrap-' . $rnd . '" style="white-space:nowrap;" class="showmore-wrap fakelink" onclick="openClose(\'showmore-' . $rnd . '\'); openClose(\'showmore-teaser-' . $rnd . '\');">' . DI::l10n()->t('show more') . '</span></span>' .
+			'<div id="showmore-' . $rnd . '" class="showmore-content" style="display: none;" aria-hidden="false" dir="auto">' . $hook_data['html'] . '</div>';
 	}
 }
 

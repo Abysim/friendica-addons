@@ -10,10 +10,10 @@ use Friendica\App;
 use Friendica\Content\PageInfo;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
-use Friendica\Core\Protocol;
+use Friendica\Core\Renderer;
+use Friendica\Core\Worker;
 use Friendica\Database\DBA;
 use Friendica\DI;
-use Friendica\Model\Item;
 use Friendica\Model\Post;
 use Friendica\Util\Strings;
 
@@ -23,89 +23,80 @@ function ifttt_install()
 	Hook::register('connector_settings_post', 'addon/ifttt/ifttt.php', 'ifttt_settings_post');
 }
 
-function ifttt_module()
+/**
+ * This is a statement rather than an actual function definition. The simple
+ * existence of this method is checked to figure out if the addon offers a
+ * module.
+ */
+function ifttt_module() {}
+
+function ifttt_content() {}
+
+function ifttt_settings(array &$data)
 {
-
-}
-
-function ifttt_content()
-{
-
-}
-
-function ifttt_settings(App $a, &$s)
-{
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$key = DI::pConfig()->get(local_user(), 'ifttt', 'key');
-
+	$key = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'ifttt', 'key');
 	if (!$key) {
 		$key = Strings::getRandomHex(20);
-		DI::pConfig()->set(local_user(), 'ifttt', 'key', $key);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'ifttt', 'key', $key);
 	}
 
-	$s .= '<span id="settings_ifttt_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_ifttt_expanded\'); openClose(\'settings_ifttt_inflated\');">';
-	$s .= '<img class="connector" src="addon/ifttt/ifttt.png" /><h3 class="connector">' . DI::l10n()->t('IFTTT Mirror') . '</h3>';
-	$s .= '</span>';
-	$s .= '<div id="settings_ifttt_expanded" class="settings-block" style="display: none;">';
-	$s .= '<span class="fakelink" onclick="openClose(\'settings_ifttt_expanded\'); openClose(\'settings_ifttt_inflated\');">';
-	$s .= '<img class="connector" src="addon/ifttt/ifttt.png" /><h3 class="connector">' . DI::l10n()->t('IFTTT Mirror') . '</h3>';
-	$s .= '</span>';
+	$t    = Renderer::getMarkupTemplate('connector_settings.tpl', 'addon/ifttt/');
+	$html = Renderer::replaceMacros($t, [
+		'$l10n'                    => [
+			'intro'                   => DI::l10n()->t('Create an account at <a href="http://www.ifttt.com">IFTTT</a>. Create three Facebook recipes that are connected with <a href="https://ifttt.com/maker">Maker</a> (In the form "if Facebook then Maker") with the following parameters:'),
+			'url'                     => DI::l10n()->t('URL'),
+			'method'                  => DI::l10n()->t('Method'),
+			'content_type'            => DI::l10n()->t('Content Type'),
+			'new_status_message_body' => DI::l10n()->t('Body for "new status message"'),
+			'new_photo_upload_body'   => DI::l10n()->t('Body for "new photo upload"'),
+			'new_link_post_body'      => DI::l10n()->t('Body for "new link post"'),
+		],
+		'$url'                     => DI::baseUrl() . '/ifttt/' . DI::userSession()->getLocalUserNickname(),
+		'$new_status_message_body' => 'key=' . $key . '&type=status&msg=<<<{{Message}}>>>&date=<<<{{UpdatedAt}}>>>&url=<<<{{PageUrl}}>>>',
+		'$new_photo_upload_body'   => 'key=' . $key . '&type=photo&link=<<<{{Link}}>>>&image=<<<{{ImageSource}}>>>&msg=<<<{{Caption}}>>>&date=<<<{{CreatedAt}}>>>&url=<<<{{PageUrl}}>>>',
+		'$new_link_post_body'      => 'key=' . $key . '&type=link&link=<<<{{Link}}>>>&title=<<<{{Title}}>>>&msg=<<<{{Message}}>>>&description=<<<{{Description}}>>>&date=<<<{{CreatedAt}}>>>&url=<<<{{PageUrl}}>>>',
+	]);
 
-	$s .= '<div id="ifttt-configuration-wrapper">';
-	$s .= '<p>' . DI::l10n()->t('Create an account at <a href="http://www.ifttt.com">IFTTT</a>. Create three Facebook recipes that are connected with <a href="https://ifttt.com/maker">Maker</a> (In the form "if Facebook then Maker") with the following parameters:') . '</p>';
-	$s .= '<h4>URL</h4>';
-	$s .= '<p>' . DI::baseUrl()->get() . '/ifttt/' . $a->user['nickname'] . '</p>';
-	$s .= '<h4>Method</h4>';
-	$s .= '<p>POST</p>';
-	$s .= '<h4>Content Type</h4>';
-	$s .= '<p>application/x-www-form-urlencoded</p>';
-	$s .= '<h4>' . DI::l10n()->t('Body for "new status message"') . '</h4>';
-	$s .= '<p><code>' . htmlentities('key=' . $key . '&type=status&msg=<<<{{Message}}>>>&date=<<<{{UpdatedAt}}>>>&url=<<<{{PageUrl}}>>>') . '</code></p>';
-	$s .= '<h4>' . DI::l10n()->t('Body for "new photo upload"') . '</h4>';
-	$s .= '<p><code>' . htmlentities('key=' . $key . '&type=photo&link=<<<{{Link}}>>>&image=<<<{{ImageSource}}>>>&msg=<<<{{Caption}}>>>&date=<<<{{CreatedAt}}>>>&url=<<<{{PageUrl}}>>>') . '</code></p>';
-	$s .= '<h4>' . DI::l10n()->t('Body for "new link post"') . '</h4>';
-	$s .= '<p><code>' . htmlentities('key=' . $key . '&type=link&link=<<<{{Link}}>>>&title=<<<{{Title}}>>>&msg=<<<{{Message}}>>>&description=<<<{{Description}}>>>&date=<<<{{CreatedAt}}>>>&url=<<<{{PageUrl}}>>>') . '</code></p>';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div id="ifttt-rekey-wrapper">';
-	$s .= '<label id="ifttt-rekey-label" for="ifttt-checkbox">' . DI::l10n()->t('Generate new key') . '</label>';
-	$s .= '<input id="ifttt-checkbox" type="checkbox" name="ifttt-rekey" value="1" />';
-	$s .= '</div><div class="clear"></div>';
-
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="ifttt-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div>';
-	$s .= '</div>';
+	$data = [
+		'connector' => 'ifttt',
+		'title'     => DI::l10n()->t('IFTTT Mirror'),
+		'image'     => 'addon/ifttt/ifttt.png',
+		'html'      => $html,
+		'submit'    => DI::l10n()->t('Generate new key'),
+	];
 }
 
 function ifttt_settings_post()
 {
-	if (!empty($_POST['ifttt-submit']) && isset($_POST['ifttt-rekey'])) {
-		DI::pConfig()->delete(local_user(), 'ifttt', 'key');
+	if (!empty($_POST['ifttt-submit'])) {
+		DI::pConfig()->delete(DI::userSession()->getLocalUserId(), 'ifttt', 'key');
 	}
 }
 
-function ifttt_post(App $a)
+function ifttt_post()
 {
-	if ($a->argc != 2) {
+	if (DI::args()->getArgc() != 2) {
 		return;
 	}
 
-	$nickname = $a->argv[1];
+	$nickname = DI::args()->getArgv()[1];
 
 	$user = DBA::selectFirst('user', ['uid'], ['nickname' => $nickname]);
 	if (!DBA::isResult($user)) {
-		Logger::log('User ' . $nickname . ' not found.', Logger::DEBUG);
+		Logger::info('User ' . $nickname . ' not found.');
 		return;
 	}
 
 	$uid = $user['uid'];
 
-	Logger::log('Received a post for user ' . $uid . ' from ifttt ' . print_r($_REQUEST, true), Logger::DEBUG);
+	Logger::info('Received a post for user ' . $uid . ' from ifttt ' . print_r($_REQUEST, true));
 
 	if (!isset($_REQUEST['key'])) {
-		Logger::log('No key found.');
+		Logger::notice('No key found.');
 		return;
 	}
 
@@ -113,7 +104,7 @@ function ifttt_post(App $a)
 
 	// Check the key
 	if ($key != DI::pConfig()->get($uid, 'ifttt', 'key')) {
-		Logger::log('Invalid key for user ' . $uid, Logger::DEBUG);
+		Logger::info('Invalid key for user ' . $uid);
 		return;
 	}
 
@@ -124,7 +115,7 @@ function ifttt_post(App $a)
 	}
 
 	if (!in_array($item['type'], ['status', 'link', 'photo'])) {
-		Logger::log('Unknown item type ' . $item['type'], Logger::DEBUG);
+		Logger::info('Unknown item type ' . $item['type']);
 		return;
 	}
 
@@ -162,8 +153,6 @@ function ifttt_post(App $a)
 
 function ifttt_message($uid, $item)
 {
-	$a = DI::app();
-
 	$post = [];
 	$post['uid'] = $uid;
 	$post['app'] = 'IFTTT';
@@ -199,5 +188,5 @@ function ifttt_message($uid, $item)
 		$link = hash('ripemd128', $item['msg']);
 	}
 
-	Post\Delayed::add($link, $post, PRIORITY_MEDIUM, true);
+	Post\Delayed::add($link, $post, Worker::PRIORITY_MEDIUM, Post\Delayed::PREPARED);
 }

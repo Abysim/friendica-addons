@@ -10,9 +10,11 @@ use Friendica\Content\Text\BBCode;
 use Friendica\Content\Text\HTML;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
+use Friendica\Core\Renderer;
 use Friendica\Database\DBA;
 use Friendica\DI;
-use Friendica\Util\Strings;
+use Friendica\Model\Item;
+use Friendica\Model\Post;
 use Friendica\Util\XML;
 
 function wppost_install()
@@ -25,131 +27,78 @@ function wppost_install()
 	Hook::register('connector_settings_post', 'addon/wppost/wppost.php', 'wppost_settings_post');
 }
 
-function wppost_jot_nets(\Friendica\App &$a, array &$jotnets_fields)
+function wppost_jot_nets(array &$jotnets_fields)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	if (DI::pConfig()->get(local_user(),'wppost','post')) {
+	if (DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'post')) {
 		$jotnets_fields[] = [
 			'type' => 'checkbox',
 			'field' => [
 				'wppost_enable',
 				DI::l10n()->t('Post to Wordpress'),
-				DI::pConfig()->get(local_user(),'wppost','post_by_default')
+				DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'post_by_default')
 			]
 		];
 	}
 }
 
 
-function wppost_settings(&$a, &$s) {
-
-	if(! local_user())
+function wppost_settings(array &$data)
+{
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
+	}
 
-	/* Add our stylesheet to the page so we can make our settings look nice */
+	$enabled            = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'post', false);
+	$wp_username        = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'wp_username');
+	$wp_blog            = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'wp_blog');
+	$def_enabled        = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'post_by_default', false);
+	$back_enabled       = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'backlink', false);
+	$wp_backlink_text   = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'wp_backlink_text');
+	$shortcheck_enabled = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'shortcheck', false);
 
-	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/wppost/wppost.css' . '" media="all" />' . "\r\n";
+	$t    = Renderer::getMarkupTemplate('connector_settings.tpl', 'addon/wppost/');
+	$html = Renderer::replaceMacros($t, [
+		'$enabled'       => ['wppost', DI::l10n()->t('Enable Wordpress Post Addon'), $enabled],
+		'$username'      => ['wp_username', DI::l10n()->t('Wordpress username'), $wp_username],
+		'$password'      => ['wp_password', DI::l10n()->t('Wordpress password')],
+		'$blog'          => ['wp_blog', DI::l10n()->t('WordPress API URL'), $wp_blog],
+		'$bydefault'     => ['wp_bydefault', DI::l10n()->t('Post to Wordpress by default'), $def_enabled],
+		'$backlink'      => ['wp_backlink', DI::l10n()->t('Provide a backlink to the Friendica post'), $back_enabled],
+		'$backlink_text' => ['wp_backlink_text', DI::l10n()->t('Text for the backlink, e.g. Read the original post and comment stream on Friendica.'), $wp_backlink_text],
+		'$shortcheck'    => ['wp_shortcheck', DI::l10n()->t('Don\'t post messages that are too short'), $shortcheck_enabled],
+	]);
 
-	/* Get the current state of our config variables */
-
-	$enabled = DI::pConfig()->get(local_user(),'wppost','post');
-	$checked = (($enabled) ? ' checked="checked" ' : '');
-
-	$css = (($enabled) ? '' : '-disabled');
-
-	$def_enabled = DI::pConfig()->get(local_user(),'wppost','post_by_default');
-	$back_enabled = DI::pConfig()->get(local_user(),'wppost','backlink');
-	$shortcheck_enabled = DI::pConfig()->get(local_user(),'wppost','shortcheck');
-
-	$def_checked = (($def_enabled) ? ' checked="checked" ' : '');
-	$back_checked = (($back_enabled) ? ' checked="checked" ' : '');
-	$shortcheck_checked = (($shortcheck_enabled) ? ' checked="checked" ' : '');
-
-	$wp_username = DI::pConfig()->get(local_user(), 'wppost', 'wp_username');
-	$wp_password = DI::pConfig()->get(local_user(), 'wppost', 'wp_password');
-	$wp_blog = DI::pConfig()->get(local_user(), 'wppost', 'wp_blog');
-	$wp_backlink_text = DI::pConfig()->get(local_user(), 'wppost', 'wp_backlink_text');
-
-
-    /* Add some HTML to the existing form */
-
-    $s .= '<span id="settings_wppost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_wppost_expanded\'); openClose(\'settings_wppost_inflated\');">';
-    $s .= '<img class="connector'.$css.'" src="images/wordpress.png" /><h3 class="connector">'. DI::l10n()->t('Wordpress Export').'</h3>';
-    $s .= '</span>';
-    $s .= '<div id="settings_wppost_expanded" class="settings-block" style="display: none;">';
-    $s .= '<span class="fakelink" onclick="openClose(\'settings_wppost_expanded\'); openClose(\'settings_wppost_inflated\');">';
-    $s .= '<img class="connector'.$css.'" src="images/wordpress.png" /><h3 class="connector">'. DI::l10n()->t('Wordpress Export').'</h3>';
-    $s .= '</span>';
-    $s .= '<div id="wppost-enable-wrapper">';
-    $s .= '<label id="wppost-enable-label" for="wppost-enable">' . DI::l10n()->t('Enable WordPress Post Addon') . '</label>';
-	$s .= '<input type="hidden" name="wppost" value="0"/>';
-    $s .= '<input id="wppost-enable" type="checkbox" name="wppost" value="1" ' . $checked . '/>';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="wppost-username-wrapper">';
-    $s .= '<label id="wppost-username-label" for="wppost-username">' . DI::l10n()->t('WordPress username') . '</label>';
-    $s .= '<input id="wppost-username" type="text" name="wp_username" value="' . $wp_username . '" />';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="wppost-password-wrapper">';
-    $s .= '<label id="wppost-password-label" for="wppost-password">' . DI::l10n()->t('WordPress password') . '</label>';
-    $s .= '<input id="wppost-password" type="password" name="wp_password" value="' . $wp_password . '" />';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="wppost-blog-wrapper">';
-    $s .= '<label id="wppost-blog-label" for="wppost-blog">' . DI::l10n()->t('WordPress API URL') . '</label>';
-    $s .= '<input id="wppost-blog" type="text" name="wp_blog" value="' . $wp_blog . '" />';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="wppost-bydefault-wrapper">';
-    $s .= '<label id="wppost-bydefault-label" for="wppost-bydefault">' . DI::l10n()->t('Post to WordPress by default') . '</label>';
-	$s .= '<input type="hidden" name="wp_bydefault" value="0"/>';
-    $s .= '<input id="wppost-bydefault" type="checkbox" name="wp_bydefault" value="1" ' . $def_checked . '/>';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="wppost-backlink-wrapper">';
-    $s .= '<label id="wppost-backlink-label" for="wppost-backlink">' . DI::l10n()->t('Provide a backlink to the Friendica post') . '</label>';
-	$s .= '<input type="hidden" name="wp_backlink" value="0"/>';
-    $s .= '<input id="wppost-backlink" type="checkbox" name="wp_backlink" value="1" ' . $back_checked . '/>';
-    $s .= '</div><div class="clear"></div>';
-    $s .= '<div id="wppost-backlinktext-wrapper">';
-    $s .= '<label id="wppost-backlinktext-label" for="wp_backlink_text">' . DI::l10n()->t('Text for the backlink, e.g. Read the original post and comment stream on Friendica.') . '</label>';
-    $s .= '<input id="wppost-backlinktext" type="text" name="wp_backlink_text" value="'. $wp_backlink_text.'" ' . $wp_backlink_text . '/>';
-    $s .= '</div><div class="clear"></div>';
-
-    $s .= '<div id="wppost-shortcheck-wrapper">';
-    $s .= '<label id="wppost-shortcheck-label" for="wppost-shortcheck">' . DI::l10n()->t("Don't post messages that are too short") . '</label>';
-    $s .= '<input type="hidden" name="wp_shortcheck" value="0"/>';
-    $s .= '<input id="wppost-shortcheck" type="checkbox" name="wp_shortcheck" value="1" '.$shortcheck_checked.'/>';
-    $s .= '</div><div class="clear"></div>';
-
-    /* provide a submit button */
-
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="wppost-submit" name="wppost-submit" class="settings-submit" value="' . DI::l10n()->t('Save Settings') . '" /></div></div>';
-
+	$data = [
+		'connector' => 'wppost',
+		'title'     => DI::l10n()->t('Wordpress Export'),
+		'image'     => 'images/wordpress.png',
+		'enabled'   => $enabled,
+		'html'      => $html,
+	];
 }
 
 
-function wppost_settings_post(&$a, &$b)
+function wppost_settings_post(array &$b)
 {
-	if(!empty($_POST['wppost-submit'])) {
-		DI::pConfig()->set(local_user(), 'wppost', 'post'           , intval($_POST['wppost']));
-		DI::pConfig()->set(local_user(), 'wppost', 'post_by_default', intval($_POST['wp_bydefault']));
-		DI::pConfig()->set(local_user(), 'wppost', 'wp_username'    ,   trim($_POST['wp_username']));
-		DI::pConfig()->set(local_user(), 'wppost', 'wp_password'    ,   trim($_POST['wp_password']));
-		DI::pConfig()->set(local_user(), 'wppost', 'wp_blog'        ,   trim($_POST['wp_blog']));
-		DI::pConfig()->set(local_user(), 'wppost', 'backlink'       , intval($_POST['wp_backlink']));
-		DI::pConfig()->set(local_user(), 'wppost', 'shortcheck'     , intval($_POST['wp_shortcheck']));
+	if (!empty($_POST['wppost-submit'])) {
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'post', intval($_POST['wppost']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'post_by_default', intval($_POST['wp_bydefault']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'wp_username',   trim($_POST['wp_username']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'wp_password',   trim($_POST['wp_password']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'wp_blog',   trim($_POST['wp_blog']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'backlink', intval($_POST['wp_backlink']));
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'shortcheck', intval($_POST['wp_shortcheck']));
 		$wp_backlink_text = BBCode::convert(trim($_POST['wp_backlink_text']), false, BBCode::BACKLINK);
 		$wp_backlink_text = HTML::toPlaintext($wp_backlink_text, 0, true);
-		DI::pConfig()->set(local_user(), 'wppost', 'wp_backlink_text', $wp_backlink_text);
+		DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'wppost', 'wp_backlink_text', $wp_backlink_text);
 	}
 }
 
-function wppost_hook_fork(&$a, &$b)
+function wppost_hook_fork(array &$b)
 {
 	if ($b['name'] != 'notifier_normal') {
 		return;
@@ -157,14 +106,17 @@ function wppost_hook_fork(&$a, &$b)
 
 	$post = $b['data'];
 
-	if ($post['deleted'] || $post['private'] || ($post['created'] !== $post['edited']) ||
-		!strstr($post['postopts'], 'wppost') || ($post['parent'] != $post['id'])) {
+	if (
+		$post['deleted'] || $post['private'] || ($post['created'] !== $post['edited']) ||
+		!strstr($post['postopts'] ?? '', 'wppost') || ($post['parent'] != $post['id'])
+	) {
 		$b['execute'] = false;
 		return;
 	}
 }
 
-function wppost_post_local(&$a, &$b) {
+function wppost_post_local(array &$b)
+{
 
 	// This can probably be changed to allow editing by pointing to a different API endpoint
 
@@ -172,7 +124,7 @@ function wppost_post_local(&$a, &$b) {
 		return;
 	}
 
-	if (!local_user() || (local_user() != $b['uid'])) {
+	if (!DI::userSession()->getLocalUserId() || (DI::userSession()->getLocalUserId() != $b['uid'])) {
 		return;
 	}
 
@@ -180,11 +132,11 @@ function wppost_post_local(&$a, &$b) {
 		return;
 	}
 
-	$wp_post   = intval(DI::pConfig()->get(local_user(), 'wppost', 'post'));
+	$wp_post   = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'post'));
 
 	$wp_enable = (($wp_post && !empty($_REQUEST['wppost_enable'])) ? intval($_REQUEST['wppost_enable']) : 0);
 
-	if ($b['api_source'] && intval(DI::pConfig()->get(local_user(), 'wppost', 'post_by_default'))) {
+	if ($b['api_source'] && intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'wppost', 'post_by_default'))) {
 		$wp_enable = 1;
 	}
 
@@ -202,17 +154,17 @@ function wppost_post_local(&$a, &$b) {
 
 
 
-function wppost_send(&$a, &$b)
+function wppost_send(array &$b)
 {
-	if($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited'])) {
+	if ($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited'])) {
 		return;
 	}
 
-	if(! strstr($b['postopts'],'wppost')) {
+	if (!strstr($b['postopts'], 'wppost')) {
 		return;
 	}
 
-	if($b['parent'] != $b['id']) {
+	if ($b['gravity'] != Item::GRAVITY_PARENT) {
 		return;
 	}
 
@@ -223,10 +175,12 @@ function wppost_send(&$a, &$b)
 		return;
 	}
 
+	$b['body'] = Post\Media::addAttachmentsToBody($b['uri-id'], DI::contentItem()->addSharedPost($b));
+
 	$wp_username = XML::escape(DI::pConfig()->get($b['uid'], 'wppost', 'wp_username'));
 	$wp_password = XML::escape(DI::pConfig()->get($b['uid'], 'wppost', 'wp_password'));
-	$wp_blog = DI::pConfig()->get($b['uid'],'wppost','wp_blog');
-	$wp_backlink_text = DI::pConfig()->get($b['uid'],'wppost','wp_backlink_text');
+	$wp_blog = DI::pConfig()->get($b['uid'], 'wppost', 'wp_blog');
+	$wp_backlink_text = DI::pConfig()->get($b['uid'], 'wppost', 'wp_backlink_text');
 	if ($wp_backlink_text == '') {
 		$wp_backlink_text = DI::l10n()->t('Read the orig­i­nal post and com­ment stream on Friendica');
 	}
@@ -236,15 +190,7 @@ function wppost_send(&$a, &$b)
 
 		if (intval(DI::pConfig()->get($b['uid'], 'wppost', 'shortcheck'))) {
 			// Checking, if its a post that is worth a blog post
-			$postentry = false;
-			$siteinfo = BBCode::getAttachedData($b["body"]);
-
-			// Is it a link to an aricle, a video or a photo?
-			if (isset($siteinfo["type"])) {
-				if (in_array($siteinfo["type"], ["link", "audio", "video", "photo"])) {
-					$postentry = true;
-				}
-			}
+			$postentry = (bool)Post\Media::getByURIId($b['uri-id'], [Post\Media::HTML, Post\Media::AUDIO, Post\Media::VIDEO, Post\Media::IMAGE]);
 
 			// Does it have a title?
 			if ($wptitle != "") {
@@ -264,9 +210,9 @@ function wppost_send(&$a, &$b)
 		// If the title is empty then try to guess
 		if ($wptitle == '') {
 			// Fetch information about the post
-			$siteinfo = BBCode::getAttachedData($b["body"]);
-			if (isset($siteinfo["title"])) {
-				$wptitle = $siteinfo["title"];
+			$media = Post\Media::getByURIId($b['uri-id'], [Post\Media::HTML]);
+			if (!empty($media) && !empty($media[0]['name']) && ($media[0]['name'] != $media[0]['url'])) {
+				$wptitle = $media[0]['name'];
 			}
 
 			// If no bookmark is found then take the first line
@@ -274,7 +220,7 @@ function wppost_send(&$a, &$b)
 				// Remove the share element before fetching the first line
 				$title = trim(preg_replace("/\[share.*?\](.*?)\[\/share\]/ism", "\n$1\n", $b['body']));
 
-				$title = HTML::toPlaintext(BBCode::convert($title, false), 0, true)."\n";
+				$title = BBCode::toPlaintext($title) . "\n";
 				$pos = strpos($title, "\n");
 				$trailer = "";
 				if (($pos == 0) || ($pos > 100)) {
@@ -282,23 +228,22 @@ function wppost_send(&$a, &$b)
 					$trailer = "...";
 				}
 
-				$wptitle = substr($title, 0, $pos).$trailer;
+				$wptitle = substr($title, 0, $pos) . $trailer;
 			}
 		}
 
 		$title = '<title>' . (($wptitle) ? $wptitle : DI::l10n()->t('Post from Friendica')) . '</title>';
-		$post = BBCode::convert($b['body'], false, BBCode::CONNECTORS);
+		$post = BBCode::convertForUriId($b['uri-id'], $b['body'], BBCode::CONNECTORS);
 
 		// If a link goes to youtube then remove the stuff around it. Wordpress detects youtube links and embeds it
 		$post = preg_replace('/<a.*?href="(https?:\/\/www.youtube.com\/.*?)".*?>(.*?)<\/a>/ism', "\n$1\n", $post);
 		$post = preg_replace('/<a.*?href="(https?:\/\/youtu.be\/.*?)".*?>(.*?)<\/a>/ism', "\n$1\n", $post);
 
-		$post = $title.$post;
+		$post = $title . $post;
 
-		$wp_backlink = intval(DI::pConfig()->get($b['uid'],'wppost','backlink'));
-		if($wp_backlink && $b['plink']) {
-			$post .= EOL . EOL . '<a href="' . $b['plink'] . '">'
-				. $wp_backlink_text . '</a>' . EOL . EOL;
+		$wp_backlink = intval(DI::pConfig()->get($b['uid'], 'wppost', 'backlink'));
+		if ($wp_backlink && $b['plink']) {
+			$post .= '<p><a href="' . $b['plink'] . '">' . $wp_backlink_text . '</a></p>';
 		}
 
 		$post = XML::escape($post);
@@ -320,11 +265,11 @@ function wppost_send(&$a, &$b)
 
 EOT;
 
-		Logger::log('wppost: data: ' . $xml, Logger::DATA);
+		Logger::debug('wppost: data: ' . $xml);
 
 		if ($wp_blog !== 'test') {
-			$x = DI::httpRequest()->post($wp_blog, $xml)->getBody();
+			$x = DI::httpClient()->post($wp_blog, $xml)->getBody();
 		}
-		Logger::log('posted to wordpress: ' . (($x) ? $x : ''), Logger::DEBUG);
+		Logger::info('posted to wordpress: ' . (($x) ? $x : ''));
 	}
 }

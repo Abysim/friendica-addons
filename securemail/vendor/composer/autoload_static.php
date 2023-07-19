@@ -13,14 +13,22 @@ class ComposerStaticInitSecuremailAddon
     public static $prefixLengthsPsr4 = array (
         'p' => 
         array (
-            'phpseclib\\' => 10,
+            'phpseclib3\\' => 11,
+        ),
+        'P' => 
+        array (
+            'ParagonIE\\ConstantTime\\' => 23,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
-        'phpseclib\\' => 
+        'phpseclib3\\' => 
         array (
             0 => __DIR__ . '/..' . '/phpseclib/phpseclib/phpseclib',
+        ),
+        'ParagonIE\\ConstantTime\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/paragonie/constant_time_encoding/src',
         ),
     );
 
@@ -74,6 +82,7 @@ class ComposerStaticInitSecuremailAddon
         'OpenPGP_TrustPacket' => __DIR__ . '/..' . '/singpolyma/openpgp-php/lib/openpgp.php',
         'OpenPGP_UserAttributePacket' => __DIR__ . '/..' . '/singpolyma/openpgp-php/lib/openpgp.php',
         'OpenPGP_UserIDPacket' => __DIR__ . '/..' . '/singpolyma/openpgp-php/lib/openpgp.php',
+        'OpenSSLWrapper' => __DIR__ . '/..' . '/singpolyma/openpgp-php/lib/openpgp_openssl_wrapper.php',
     );
 
     public static function getInitializer(ClassLoader $loader)

@@ -6,6 +6,7 @@
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  */
 
+use Friendica\App;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
@@ -17,7 +18,7 @@ function nominatim_install()
 	Hook::register('post_remote', 'addon/nominatim/nominatim.php', 'nominatim_post_hook');
 }
 
-function nominatim_resolve_item(&$item)
+function nominatim_resolve_item(array &$item)
 {
 	if(empty($item['coord']) || !empty($item['location'])) {
 		return;
@@ -43,7 +44,7 @@ function nominatim_resolve_item(&$item)
 		return;
 	}
 
-	$s = DI::httpRequest()->fetch('https://nominatim.openstreetmap.org/reverse?lat=' . $coords[0] . '&lon=' . $coords[1] . '&format=json&addressdetails=0&accept-language=' . $language);
+	$s = DI::httpClient()->fetch('https://nominatim.openstreetmap.org/reverse?lat=' . $coords[0] . '&lon=' . $coords[1] . '&format=json&addressdetails=0&accept-language=' . $language);
 	if (empty($s)) {
 		Logger::info('API could not be queried');
 		return;
@@ -64,12 +65,12 @@ function nominatim_resolve_item(&$item)
 	}
 }
 
-function nominatim_post_hook($a, &$item)
+function nominatim_post_hook(array &$item)
 {
 	nominatim_resolve_item($item);
 }
 
-function nominatim_addon_admin(&$a, &$o)
+function nominatim_addon_admin(string &$o)
 {
 
 	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/nominatim/');
@@ -80,8 +81,7 @@ function nominatim_addon_admin(&$a, &$o)
 	]);
 }
 
-function nominatim_addon_admin_post(&$a)
+function nominatim_addon_admin_post()
 {
-	$language  = !empty($_POST['language']) ? trim($_POST['language']) : '';
-	DI::config()->set('nominatim', 'language', $language);
+	DI::config()->set('nominatim', 'language', (!empty($_POST['language']) ? trim($_POST['language']) : ''));
 }

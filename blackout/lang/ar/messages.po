@@ -1,0 +1,67 @@
+# ADDON blackout
+# Copyright (C)
+# This file is distributed under the same license as the Friendica blackout addon package.
+# 
+# 
+# Translators:
+# Farida Khalaf <faridakhalaf@hotmail.com>, 2021
+msgid ""
+msgstr ""
+"Project-Id-Version: friendica\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-02-01 18:15+0100\n"
+"PO-Revision-Date: 2021-10-26 18:49+0000\n"
+"Last-Translator: abidin toumi <abidin24@tutanota.com>\n"
+"Language-Team: Arabic (http://www.transifex.com/Friendica/friendica/language/ar/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ar\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+#: blackout.php:97
+msgid ""
+"The end-date is prior to the start-date of the blackout, you should fix "
+"this."
+msgstr "تاريخ الانتهاء يسبق تاريخ بدء التعتيم ، يجب إصلاح هذا."
+
+#: blackout.php:99
+#, php-format
+msgid ""
+"Please double check the current settings for the blackout. It will begin on "
+"<strong>%s</strong> and end on <strong>%s</strong>."
+msgstr "يرجى التحقق مرة أخرى من الإعدادات الحالية لحالة التعتيم. بدأ في 1 ٪ 1 %s وانتهاء في2٪2 %s."
+
+#: blackout.php:102
+msgid "Save Settings"
+msgstr "احفظ الإعدادات"
+
+#: blackout.php:103
+msgid "Redirect URL"
+msgstr "أعد توجيه الرابط"
+
+#: blackout.php:103
+msgid "All your visitors from the web will be redirected to this URL."
+msgstr "سيعاد توجيه جميع الزوار إلى هذا الرابط."
+
+#: blackout.php:104
+msgid "Begin of the Blackout"
+msgstr "بدء التعتيم"
+
+#: blackout.php:104
+msgid ""
+"Format is <tt>YYYY-MM-DD hh:mm</tt>; <em>YYYY</em> year, <em>MM</em> month, "
+"<em>DD</em> day, <em>hh</em> hour and <em>mm</em> minute."
+msgstr "الصيغة هي: <tt>YYYY-MM-DD hh:mm</tt>؛\n<em>YYYY</em> السنة، <em>MM</em> الشهر، <em>DD</em> اليوم، <em>hh</em> الساعة، <em>mm</em> الدقيقة."
+
+#: blackout.php:105
+msgid "End of the Blackout"
+msgstr "نهاية التعتيم"
+
+#: blackout.php:107
+msgid ""
+"<strong>Note</strong>: The redirect will be active from the moment you press"
+" the submit button. Users currently logged in will <strong>not</strong> be "
+"thrown out but can't login again after logging out while the blackout is "
+"still in place."
+msgstr "<strong>ملاحظة</strong>: إعادة التوجيه ستنشط إبتداءً من لحظة ضغط زر الإرسال. <strong>لن</strong> يُطرد المستخدمون الوالجون حاليًا ولكن إذا خروجوا لن يمكنهم الولوج أثناء التعتيم."

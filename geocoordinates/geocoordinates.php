@@ -6,11 +6,11 @@
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  */
 
+use Friendica\App;
 use Friendica\Core\Hook;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\DI;
-use Friendica\Util\Strings;
 
 function geocoordinates_install()
 {
@@ -18,69 +18,73 @@ function geocoordinates_install()
 	Hook::register('post_remote', 'addon/geocoordinates/geocoordinates.php', 'geocoordinates_post_hook');
 }
 
-function geocoordinates_resolve_item(&$item)
+function geocoordinates_resolve_item(array &$item)
 {
-	if((!$item["coord"]) || ($item["location"]))
+	if ((!$item['coord']) || ($item['location'])) {
 		return;
+	}
 
-	$key = DI::config()->get("geocoordinates", "api_key");
-	if ($key == "")
+	$key = DI::config()->get('geocoordinates', 'api_key');
+	if ($key == '') {
 		return;
+	}
 
-	$language = DI::config()->get("geocoordinates", "language");
-	if ($language == "")
-		$language = "de";
+	$language = DI::config()->get('geocoordinates', 'language');
+	if ($language == '') {
+		$language = 'de';
+	}
 
-	$coords = explode(' ',$item["coord"]);
+	$coords = explode(' ', $item['coord']);
 
-	if (count($coords) < 2)
+	if (count($coords) < 2) {
 		return;
+	}
 
 	$coords[0] = round($coords[0], 5);
 	$coords[1] = round($coords[1], 5);
 
-	$result = DI::cache()->get("geocoordinates:".$language.":".$coords[0]."-".$coords[1]);
+	$result = DI::cache()->get('geocoordinates:' . $language . ':' . $coords[0] . '-' . $coords[1]);
 	if (!is_null($result)) {
-		$item["location"] = $result;
+		$item['location'] = $result;
 		return;
 	}
 
-	$s = DI::httpRequest()->fetch("https://api.opencagedata.com/geocode/v1/json?q=" . $coords[0] . "," . $coords[1] . "&key=" . $key . "&language=" . $language);
+	$s = DI::httpClient()->fetch('https://api.opencagedata.com/geocode/v1/json?q=' . $coords[0] . ',' . $coords[1] . '&key=' . $key . '&language=' . $language);
 
 	if (!$s) {
-		Logger::log("API could not be queried", Logger::DEBUG);
+		Logger::info('API could not be queried');
 		return;
 	}
 
 	$data = json_decode($s);
 
-	if ($data->status->code != "200") {
-		Logger::log("API returned error ".$data->status->code." ".$data->status->message, Logger::DEBUG);
+	if ($data->status->code != '200') {
+		Logger::info('API returned error ' . $data->status->code . ' ' . $data->status->message);
 		return;
 	}
 
 	if (($data->total_results == 0) || (count($data->results) == 0)) {
-		Logger::log("No results found for coordinates ".$item["coord"], Logger::DEBUG);
+		Logger::info('No results found for coordinates ' . $item['coord']);
 		return;
 	}
 
-	$item["location"] = $data->results[0]->formatted;
+	$item['location'] = $data->results[0]->formatted;
 
-	Logger::log("Got location for coordinates ".$coords[0]."-".$coords[1].": ".$item["location"], Logger::DEBUG);
+	Logger::info('Got location for coordinates ' . $coords[0] . '-' . $coords[1] . ': ' . $item['location']);
 
-	if ($item["location"] != "")
-		DI::cache()->set("geocoordinates:".$language.":".$coords[0]."-".$coords[1], $item["location"]);
+	if ($item['location'] != '') {
+		DI::cache()->set('geocoordinates:' . $language.':' . $coords[0] . '-' . $coords[1], $item['location']);
+	}
 }
 
-function geocoordinates_post_hook($a, &$item)
+function geocoordinates_post_hook(&$item)
 {
 	geocoordinates_resolve_item($item);
 }
 
-function geocoordinates_addon_admin(&$a, &$o)
+function geocoordinates_addon_admin(string &$o)
 {
-
-	$t = Renderer::getMarkupTemplate("admin.tpl", "addon/geocoordinates/");
+	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/geocoordinates/');
 
 	$o = Renderer::replaceMacros($t, [
 		'$submit' => DI::l10n()->t('Save Settings'),
@@ -89,11 +93,8 @@ function geocoordinates_addon_admin(&$a, &$o)
 	]);
 }
 
-function geocoordinates_addon_admin_post(&$a)
+function geocoordinates_addon_admin_post()
 {
-	$api_key  = (!empty($_POST['api_key']) ? Strings::escapeTags(trim($_POST['api_key']))   : '');
-	DI::config()->set('geocoordinates', 'api_key', $api_key);
-
-	$language  = (!empty($_POST['language']) ? Strings::escapeTags(trim($_POST['language']))   : '');
-	DI::config()->set('geocoordinates', 'language', $language);
+	DI::config()->set('geocoordinates', 'api_key', trim($_POST['api_key'] ?? ''));
+	DI::config()->set('geocoordinates', 'language', trim($_POST['language'] ?? ''));
 }

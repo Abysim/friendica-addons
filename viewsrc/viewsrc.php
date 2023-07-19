@@ -6,15 +6,19 @@
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
  *
  */
+
+use Friendica\App;
 use Friendica\Core\Hook;
 use Friendica\DI;
 
-function viewsrc_install() {
+function viewsrc_install()
+{
 	Hook::register('item_photo_menu', 'addon/viewsrc/viewsrc.php', 'viewsrc_item_photo_menu');
 	Hook::register('page_end', 'addon/viewsrc/viewsrc.php', 'viewsrc_page_end');
 }
 
-function viewsrc_page_end(&$a, &$o){
+function viewsrc_page_end(string &$o)
+{
 	DI::page()['htmlhead'] .= <<< EOS
 	<script>
 		$(function(){
@@ -26,11 +30,11 @@ function viewsrc_page_end(&$a, &$o){
 EOS;
 }
 
-function viewsrc_item_photo_menu(&$a, &$b)
+function viewsrc_item_photo_menu(array &$b)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	$b['menu'] = array_merge([DI::l10n()->t('View Source') => DI::baseUrl()->get() . '/viewsrc/'. $b['item']['uri-id']], $b['menu']);
+	$b['menu'] = array_merge([DI::l10n()->t('View Source') => DI::baseUrl() . '/viewsrc/'. $b['item']['uri-id']], $b['menu']);
 }

@@ -10,10 +10,9 @@
  */
 
 use Friendica\App;
-use Friendica\Core\Cache\Duration;
+use Friendica\Core\Cache\Enum\Duration;
 use Friendica\Core\Hook;
 use Friendica\Core\Renderer;
-use Friendica\Core\Session;
 use Friendica\DI;
 use Friendica\Util\Proxy as ProxyUtils;
 
@@ -32,7 +31,7 @@ function getWeather($loc, $units = 'metric', $lang = 'en', $appid = '', $cacheti
 	$now = new DateTime();
 
 	if (!is_null($cached)) {
-		$cdate = DI::pConfig()->get(local_user(), 'curweather', 'last');
+		$cdate = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'last');
 		$cached = unserialize($cached);
 
 		if ($cdate + $cachetime > $now->getTimestamp()) {
@@ -41,10 +40,10 @@ function getWeather($loc, $units = 'metric', $lang = 'en', $appid = '', $cacheti
 	}
 
 	try {
-		$res = new SimpleXMLElement(DI::httpRequest()->fetch($url));
+		$res = new SimpleXMLElement(DI::httpClient()->fetch($url));
 	} catch (Exception $e) {
 		if (empty($_SESSION['curweather_notice_shown'])) {
-			notice(DI::l10n()->t('Error fetching weather data. Error was: ' . $e->getMessage()));
+			DI::sysmsg()->addNotice(DI::l10n()->t('Error fetching weather data. Error was: ' . $e->getMessage()));
 			$_SESSION['curweather_notice_shown'] = true;
 		}
 
@@ -81,19 +80,19 @@ function getWeather($loc, $units = 'metric', $lang = 'en', $appid = '', $cacheti
 		'icon'        => (string) $res->weather['icon'],
 	];
 
-	DI::pConfig()->set(local_user(), 'curweather', 'last', $now->getTimestamp());
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'curweather', 'last', $now->getTimestamp());
 	DI::cache()->set('curweather'.md5($url), serialize($r), Duration::HOUR);
 
 	return $r;
 }
 
-function curweather_network_mod_init(App $a, &$b)
+function curweather_network_mod_init(string &$body)
 {
-	if (!intval(DI::pConfig()->get(local_user(), 'curweather', 'curweather_enable'))) {
+	if (!intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_enable'))) {
 		return;
 	}
 
-	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl()->get() . '/addon/curweather/curweather.css' . '" media="all" />' . "\r\n";
+	DI::page()['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . DI::baseUrl() . '/addon/curweather/curweather.css' . '" media="all" />' . "\r\n";
 
 	// $rpt value is needed for location
 	// $lang will be taken from the browser session to honour user settings
@@ -104,15 +103,15 @@ function curweather_network_mod_init(App $a, &$b)
 	// those parameters will be used to get: cloud status, temperature, preassure
 	// and relative humidity for display, also the relevent area of the map is
 	// linked from lat/log of the reply of OWMp
-	$rpt = DI::pConfig()->get(local_user(), 'curweather', 'curweather_loc');
+	$rpt = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_loc');
 
 	// Set the language to the browsers language or default and use metric units
-	$lang = Session::get('language', DI::config()->get('system', 'language'));
-	$units = DI::pConfig()->get( local_user(), 'curweather', 'curweather_units');
+	$lang  = DI::session()->get('language', DI::config()->get('system', 'language'));
+	$units = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_units');
 	$appid = DI::config()->get('curweather', 'appid');
 	$cachetime = intval(DI::config()->get('curweather', 'cachetime'));
 
-	if ($units === "") {
+	if ($units === '') {
 		$units = 'metric';
 	}
 
@@ -153,58 +152,56 @@ function curweather_network_mod_init(App $a, &$b)
 	DI::page()['aside'] = $curweather . DI::page()['aside'];
 }
 
-function curweather_addon_settings_post(App $a, $post)
+function curweather_addon_settings_post($post)
 {
-	if (!local_user() || empty($_POST['curweather-settings-submit'])) {
+	if (!DI::userSession()->getLocalUserId() || empty($_POST['curweather-settings-submit'])) {
 		return;
 	}
 
-	DI::pConfig()->set(local_user(), 'curweather', 'curweather_loc'   , trim($_POST['curweather_loc']));
-	DI::pConfig()->set(local_user(), 'curweather', 'curweather_enable', intval($_POST['curweather_enable']));
-	DI::pConfig()->set(local_user(), 'curweather', 'curweather_units' , trim($_POST['curweather_units']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_loc'   , trim($_POST['curweather_loc']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_enable', intval($_POST['curweather_enable']));
+	DI::pConfig()->set(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_units' , trim($_POST['curweather_units']));
 }
 
-function curweather_addon_settings(App $a, &$s)
+function curweather_addon_settings(array &$data)
 {
-	if (!local_user()) {
+	if (!DI::userSession()->getLocalUserId()) {
 		return;
 	}
 
-	/* Get the current state of our config variable */
-	$curweather_loc = DI::pConfig()->get(local_user(), 'curweather', 'curweather_loc');
-	$curweather_units = DI::pConfig()->get(local_user(), 'curweather', 'curweather_units');
-	$appid = DI::config()->get('curweather', 'appid');
+	$curweather_loc   = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_loc');
+	$curweather_units = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_units');
+	$appid            = DI::config()->get('curweather', 'appid');
 
-	if ($appid == "") {
+	if ($appid == '') {
 		$noappidtext = DI::l10n()->t('No APPID found, please contact your admin to obtain one.');
 	} else {
 		$noappidtext = '';
 	}
 
-	$enable = intval(DI::pConfig()->get(local_user(), 'curweather', 'curweather_enable'));
-	$enable_checked = (($enable) ? ' checked="checked" ' : '');
-	
-	// load template and replace the macros
-	$t = Renderer::getMarkupTemplate("settings.tpl", "addon/curweather/" );
+	$enabled = intval(DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'curweather', 'curweather_enable'));
 
-	$s = Renderer::replaceMacros($t, [
-		'$submit' => DI::l10n()->t('Save Settings'),
-		'$header' => DI::l10n()->t('Current Weather').' '.DI::l10n()->t('Settings'),
-		'$noappidtext' => $noappidtext,
-		'$info' => DI::l10n()->t('Enter either the name of your location or the zip code.'),
-		'$curweather_loc' => [ 'curweather_loc', DI::l10n()->t('Your Location'), $curweather_loc, DI::l10n()->t('Identifier of your location (name or zip code), e.g. <em>Berlin,DE</em> or <em>14476,DE</em>.') ],
-		'$curweather_units' => [ 'curweather_units', DI::l10n()->t('Units'), $curweather_units, DI::l10n()->t('select if the temperature should be displayed in &deg;C or &deg;F'), ['metric'=>'°C', 'imperial'=>'°F']],
-		'$enabled' => [ 'curweather_enable', DI::l10n()->t('Show weather data'), $enable, '']
+	$t    = Renderer::getMarkupTemplate('settings.tpl', 'addon/curweather/');
+	$html = Renderer::replaceMacros($t, [
+		'$noappidtext'      => $noappidtext,
+		'$info'             => DI::l10n()->t('Enter either the name of your location or the zip code.'),
+		'$curweather_loc'   => ['curweather_loc', DI::l10n()->t('Your Location'), $curweather_loc, DI::l10n()->t('Identifier of your location (name or zip code), e.g. <em>Berlin,DE</em> or <em>14476,DE</em>.')],
+		'$curweather_units' => ['curweather_units', DI::l10n()->t('Units'), $curweather_units, DI::l10n()->t('select if the temperature should be displayed in &deg;C or &deg;F'), ['metric' => '°C', 'imperial' => '°F']],
+		'$enabled'          => ['curweather_enable', DI::l10n()->t('Show weather data'), $enabled, ''],
 	]);
 
-	return;
+	$data = [
+		'addon' => 'curweather',
+		'title' => DI::l10n()->t('Current Weather Settings'),
+		'html'  => $html,
+	];
 }
 
 // Config stuff for the admin panel to let the admin of the node set a APPID
 // for accessing the API of openweathermap
-function curweather_addon_admin_post(App $a)
+function curweather_addon_admin_post()
 {
-	if (!is_site_admin()) {
+	if (!DI::userSession()->isSiteAdmin()) {
 		return;
 	}
 
@@ -214,16 +211,16 @@ function curweather_addon_admin_post(App $a)
 	}
 }
 
-function curweather_addon_admin(App $a, &$o)
+function curweather_addon_admin(string &$o)
 {
-	if (!is_site_admin()) {
+	if (!DI::userSession()->isSiteAdmin()) {
 		return;
 	}
 
 	$appid = DI::config()->get('curweather', 'appid');
 	$cachetime = DI::config()->get('curweather', 'cachetime');
 
-	$t = Renderer::getMarkupTemplate("admin.tpl", "addon/curweather/" );
+	$t = Renderer::getMarkupTemplate('admin.tpl', 'addon/curweather/' );
 
 	$o = Renderer::replaceMacros($t, [
 		'$submit' => DI::l10n()->t('Save Settings'),

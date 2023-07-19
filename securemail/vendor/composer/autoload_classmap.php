@@ -55,4 +55,5 @@ return array(
     'OpenPGP_TrustPacket' => $vendorDir . '/singpolyma/openpgp-php/lib/openpgp.php',
     'OpenPGP_UserAttributePacket' => $vendorDir . '/singpolyma/openpgp-php/lib/openpgp.php',
     'OpenPGP_UserIDPacket' => $vendorDir . '/singpolyma/openpgp-php/lib/openpgp.php',
+    'OpenSSLWrapper' => $vendorDir . '/singpolyma/openpgp-php/lib/openpgp_openssl_wrapper.php',
 );
