@@ -158,7 +158,10 @@ function ifttt_message($uid, $item)
 	$post['app'] = 'IFTTT';
 	$post['title'] = '';
 	$post['body'] = $item['msg'];
-	$post['category'] = $item['cat'];
+	if (!empty($item['cat'])) {
+		$post['category'] = $item['cat'];
+		$post['cat'] = $item['cat'];
+	}
 	//$post['date'] = $item['date'];
 	//$post['uri'] = $item['url'];
 
