@@ -20,7 +20,7 @@ pipeline:
     commands:
       - git config --global user.email "no-reply@friendi.ca"
       - git config --global user.name "Friendica"
-      - git clone $CI_REPO_LINK addon
+      - git clone $CI_REPO_CLONE_URL addon
       - cd addon/
       - git checkout $CI_COMMIT_BRANCH
       - git fetch origin $CI_COMMIT_REF
@@ -45,7 +45,7 @@ pipeline:
       branch: [ develop, '*-rc' ]
       event: push
   composer_install:
-    image: friendicaci/php7.4:php7.4.33
+    image: friendicaci/php8.2:php8.2.16
     commands:
       - export COMPOSER_HOME=.composer
       - composer validate
