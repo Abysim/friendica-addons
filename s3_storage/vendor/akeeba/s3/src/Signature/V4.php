@@ -3,16 +3,16 @@
  * Akeeba Engine
  *
  * @package   akeebaengine
- * @copyright Copyright (c)2006-2020 Nicholas K. Dionysopoulos / Akeeba Ltd
+ * @copyright Copyright (c)2006-2024 Nicholas K. Dionysopoulos / Akeeba Ltd
  * @license   GNU General Public License version 3, or later
  */
 
-namespace Akeeba\Engine\Postproc\Connector\S3v4\Signature;
+namespace Akeeba\S3\Signature;
 
 // Protection against direct access
-defined('AKEEBAENGINE') or die();
+defined('AKEEBAENGINE') || die();
 
-use Akeeba\Engine\Postproc\Connector\S3v4\Signature;
+use Akeeba\S3\Signature;
 use DateTime;
 
 /**
@@ -77,14 +77,20 @@ class V4 extends Signature
 		 * http://s3-eu-west-1.amazonaws.com/example instead of http://example.amazonaws.com/ for all authenticated URLs
 		 */
 		$region   = $this->request->getConfiguration()->getRegion();
+		$bucket   = $this->request->getBucket();
 		$hostname = $this->getPresignedHostnameForRegion($region);
+
+		if (!$this->request->getConfiguration()->getPreSignedBucketInURL() && $this->isValidBucketName($bucket))
+		{
+			$hostname = $bucket . '.' . $hostname;
+		}
+
 		$this->request->setHeader('Host', $hostname);
 
 		// Set the expiration time in seconds
 		$this->request->setHeader('Expires', (int) $lifetime);
 
 		// Get the query parameters, including the calculated signature
-		$bucket           = $this->request->getBucket();
 		$uri              = $this->request->getResource();
 		$headers          = $this->request->getHeaders();
 		$protocol         = $https ? 'https' : 'http';
@@ -92,6 +98,15 @@ class V4 extends Signature
 
 		// The query parameters are returned serialized; unserialize them, then build and return the URL.
 		$queryParameters = unserialize($serialisedParams);
+
+		// This should be toggleable
+		if (
+			!$this->request->getConfiguration()->getPreSignedBucketInURL()
+			&& $this->isValidBucketName($bucket)
+			&& strpos($uri, '/' . $bucket) === 0)
+		{
+			$uri = substr($uri, strlen($bucket) + 1);
+		}
 
 		$query = http_build_query($queryParameters);
 
@@ -126,11 +141,11 @@ class V4 extends Signature
 		}
 
 		// Get the credentials scope
-		$signatureDate = new DateTime($headers['Date']);
+		$signatureDate = new DateTime($headers['Date'] ?? $amzHeaders['x-amz-date']);
 
 		$credentialScope = $signatureDate->format('Ymd') . '/' .
-			$this->request->getConfiguration()->getRegion() . '/' .
-			's3/aws4_request';
+		                   $this->request->getConfiguration()->getRegion() . '/' .
+		                   's3/aws4_request';
 
 		/**
 		 * If the Expires header is set up we're pre-signing a download URL. The string to sign is a bit
@@ -207,26 +222,55 @@ class V4 extends Signature
 
 		// The canonical URI is the resource path
 		$canonicalURI     = $resourcePath;
-		$bucketResource   = '/' . $bucket;
-		$regionalHostname = ($headers['Host'] != 's3.amazonaws.com') && ($headers['Host'] != $bucket . '.s3.amazonaws.com');
+		$bucketResource   = '/' . $bucket . '/';
+		$regionalHostname = ($headers['Host'] != 's3.amazonaws.com')
+		                    && ($headers['Host'] != $bucket . '.s3.amazonaws.com');
+
+		/**
+		 * Yet another special case for third party, S3-compatible services, when using pre-signed URLs.
+		 *
+		 * Given a bucket `example` and filepath `foo/bar.txt` the canonical URI to sign is supposed to be
+		 * /example/foo/bar.txt regardless of whether we are using path style or subdomain hosting style access to the
+		 * bucket.
+		 *
+		 * When calculating a pre-signed URL, the URL we will be accessing will be something to the tune of
+		 * example.endpoint.com/foo/bar.txt. Amazon S3 proper allows us to use EITHER the nominal canonical URI
+		 * /foo/bar.txt OR the /example/foo/bar.txt canonical URI for consistency. Some third party providers, like
+		 * Wasabi, will choke on the former and complain about the signature being invalid.
+		 *
+		 * To address this issue we check if all the following conditions are met:
+		 * - We are calculating a signature for a pre-signed URL.
+		 * - The service is NOT Amazon S3 proper.
+		 * - The domain name starts with the bucket name.
+		 * In this case, and this case only, we set $regionalHostname to false. This triggers an if-block further down
+		 * which strips the `/bucketName/` prefix from the canonical URI, converting it to `/`. Therefore, the canonical
+		 * URI in the signature becomes the nominal URI we will be accessing in the bucket, solving the problem with
+		 * those third party services.
+		 */
+		// Figuring out whether it's a regional hostname DOES NOT work above if it's not AWS S3 proper. Let's fix that.
+		if ($isPresignedURL && strpos($headers['Host'], 'amazonaws.com') === false && !strpos($headers['Host'], $bucket . '.'))
+		{
+			$regionalHostname = false;
+		}
 
 		// Special case: if the canonical URI ends in /?location the bucket name DOES count as part of the canonical URL
 		// even though the Host is s3.amazonaws.com (in which case it normally shouldn't count). Yeah, I know, it makes
 		// no sense!!!
-		if (!$regionalHostname && ($headers['Host'] == 's3.amazonaws.com') && (substr($canonicalURI, -10) == '/?location'))
+		if (!$regionalHostname && ($headers['Host'] == 's3.amazonaws.com')
+		    && (substr($canonicalURI, -10) == '/?location'))
 		{
 			$regionalHostname = true;
 		}
 
-		if (!$regionalHostname && (strpos($canonicalURI, $bucketResource) === 0))
+		if (!$regionalHostname && (strpos($canonicalURI, $bucketResource) === 0 || strpos($canonicalURI, substr($bucketResource, 0, -1)) === 0))
 		{
-			if ($canonicalURI === $bucketResource)
+			if ($canonicalURI === substr($bucketResource, 0, -1))
 			{
 				$canonicalURI = '/';
 			}
 			else
 			{
-				$canonicalURI = substr($canonicalURI, strlen($bucketResource));
+				$canonicalURI = substr($canonicalURI, strlen($bucketResource) - 1);
 			}
 		}
 
@@ -274,11 +318,11 @@ class V4 extends Signature
 
 		// Calculate the canonical request
 		$canonicalRequest = $verb . "\n" .
-			$canonicalURI . "\n" .
-			$canonicalQueryString . "\n" .
-			$canonicalHeaders . "\n" .
-			$signedHeaders . "\n" .
-			$requestPayloadHash;
+		                    $canonicalURI . "\n" .
+		                    $canonicalQueryString . "\n" .
+		                    $canonicalHeaders . "\n" .
+		                    $signedHeaders . "\n" .
+		                    $requestPayloadHash;
 
 		$hashedCanonicalRequest = hash('sha256', $canonicalRequest);
 
@@ -290,17 +334,40 @@ class V4 extends Signature
 			$headers['Date'] = '';
 		}
 
+		/**
+		 * The Date in the String-to-Sign is a messy situation.
+		 *
+		 * Amazon's documentation says it must be in ISO 8601 format: `Ymd\THis\Z`. Unfortunately, Amazon's
+		 * documentation is actually wrong :troll_face: The actual Amazon S3 service expects the date to be formatted as
+		 * per RFC1123.
+		 *
+		 * Most third party implementations have caught up to the fact that Amazon has documented the v4 signatures
+		 * wrongly (naughty AWS!) and accept either format.
+		 *
+		 * Some other third party implementations, which never bothered to validate their implementations against Amazon
+		 * S3 proper, only expect what Amazon has documented as "ISO 8601". Therefore, we detect third party services
+		 * and switch to the as-documented date format.
+		 *
+		 * Some other third party services, like Wasabi, are broken in yet a different way. They will only use the date
+		 * from the x-amz-date header, WITHOUT falling back to the Date header if the former is not present. This is
+		 * the opposite of Amazon S3 proper which does expect the Date header. That's why the Request class sets both
+		 * headers if the request is made to a service _other_ than Amazon S3 proper.
+		 */
+		$dateToSignFor = strpos($headers['Host'], '.amazonaws.com') !== false
+			? (($headers['Date'] ?? null) ?: ($amzHeaders['x-amz-date'] ?? null) ?: $signatureDate->format('Ymd\THis\Z'))
+			: $signatureDate->format('Ymd\THis\Z');
+
 		$stringToSign = "AWS4-HMAC-SHA256\n" .
-			$headers['Date'] . "\n" .
-			$credentialScope . "\n" .
-			$hashedCanonicalRequest;
+		                $dateToSignFor . "\n" .
+		                $credentialScope . "\n" .
+		                $hashedCanonicalRequest;
 
 		if ($isPresignedURL)
 		{
 			$stringToSign = "AWS4-HMAC-SHA256\n" .
-				$parameters['X-Amz-Date'] . "\n" .
-				$credentialScope . "\n" .
-				$hashedCanonicalRequest;
+			                $parameters['X-Amz-Date'] . "\n" .
+			                $credentialScope . "\n" .
+			                $hashedCanonicalRequest;
 		}
 
 		// ========== Step 3: Calculate the signature ==========
@@ -313,9 +380,9 @@ class V4 extends Signature
 		// See http://docs.aws.amazon.com/general/latest/gr/sigv4-add-signature-to-request.html
 
 		$authorization = 'AWS4-HMAC-SHA256 Credential=' .
-			$this->request->getConfiguration()->getAccess() . '/' . $credentialScope . ', ' .
-			'SignedHeaders=' . $signedHeaders . ', ' .
-			'Signature=' . $signature;
+		                 $this->request->getConfiguration()->getAccess() . '/' . $credentialScope . ', ' .
+		                 'SignedHeaders=' . $signedHeaders . ', ' .
+		                 'Signature=' . $signature;
 
 		// For presigned URLs we only return the Base64-encoded signature without the AWS format specifier and the
 		// public access key.
@@ -366,8 +433,16 @@ class V4 extends Signature
 	 */
 	private function getPresignedHostnameForRegion(string $region): string
 	{
-		$endpoint         = 's3.' . $region . '.amazonaws.com';
-		$dualstackEnabled = $this->request->getConfiguration()->getDualstackUrl();
+		$config   = $this->request->getConfiguration();
+		$endpoint = $config->getEndpoint();
+
+		if (empty($endpoint))
+		{
+			$endpoint = 's3.' . $region . '.amazonaws.com';
+		}
+
+		// As of October 2023, AWS does not consider DualStack signed URLs as valid. Whatever.
+		$dualstackEnabled = false && $this->request->getConfiguration()->getDualstackUrl();
 
 		// If dual-stack URLs are enabled then prepend the endpoint
 		if ($dualstackEnabled)
@@ -381,5 +456,84 @@ class V4 extends Signature
 		}
 
 		return $endpoint;
+	}
+
+	/**
+	 * Is this a valid bucket name?
+	 *
+	 * @param   string  $bucketName   The bucket name to check
+	 * @param   bool    $asSubdomain  Should I put additional restrictions for use as a subdomain?
+	 *
+	 * @return  bool
+	 * @since   2.3.1
+	 *
+	 * @see     https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
+	 */
+	private function isValidBucketName(string $bucketName, bool $asSubdomain = true): bool
+	{
+		/**
+		 * If there are dots in the bucket name I can't use it as a subdomain.
+		 *
+		 * "If you include dots in a bucket's name, you can't use virtual-host-style addressing over HTTPS, unless you
+		 * perform your own certificate validation. This is because the security certificates used for virtual hosting
+		 * of buckets don't work for buckets with dots in their names."
+		 */
+		if ($asSubdomain && strpos($bucketName, '.') !== false)
+		{
+			return false;
+		}
+
+		/**
+		 * - Bucket names must be between 3 (min) and 63 (max) characters long.
+		 * - Bucket names can consist only of lowercase letters, numbers, dots (.), and hyphens (-).
+		 */
+		if (!preg_match('/^[a-z0-9\-.]{3,63}$/', $bucketName))
+		{
+			return false;
+		}
+
+		// Bucket names must begin and end with a letter or number.
+		if (!preg_match('/^[a-z0-9].*[a-z0-9]$/', $bucketName))
+		{
+			return false;
+		}
+
+		// Bucket names must not contain two adjacent periods.
+		if (preg_match('/\.\./', $bucketName))
+		{
+			return false;
+		}
+
+		// Bucket names must not be formatted as an IP address (for example, 192.168.5.4).
+		if (preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/', $bucketName))
+		{
+			return false;
+		}
+
+		// Bucket names must not start with the prefix xn--.
+		if (strpos($bucketName, 'xn--') === 0)
+		{
+			return false;
+		}
+
+		// Bucket names must not start with the prefix sthree- and the prefix sthree-configurator.
+		if (strpos($bucketName, 'sthree-') === 0)
+		{
+			return false;
+		}
+
+		// Bucket names must not end with the suffix -s3alias.
+		if (substr($bucketName, -8) === '-s3alias')
+		{
+			return false;
+		}
+
+		// Bucket names must not end with the suffix --ol-s3.
+		if (substr($bucketName, -7) === '--ol-s3')
+		{
+			return false;
+		}
+
+		return true;
 	}
 }

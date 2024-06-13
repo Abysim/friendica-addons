@@ -18,11 +18,11 @@ use Friendica\Core\Logger;
 use Friendica\Core\Protocol;
 use Friendica\Core\Renderer;
 use Friendica\Core\System;
+use Friendica\Core\Worker;
 use Friendica\Database\DBA;
 use Friendica\DI;
 use Friendica\Model\Contact;
 use Friendica\Model\Item;
-use Friendica\Model\ItemURI;
 use Friendica\Model\Photo;
 use Friendica\Model\Post;
 use Friendica\Model\Tag;
@@ -79,7 +79,7 @@ function tumblr_check_item_notification(array &$notification_data)
 		return;
 	}
 
-	$own_user = Contact::selectFirst(['url', 'alias'], ['uid' => $notification_data['uid'], 'poll' => 'tumblr::' . $page]);
+	$own_user = Contact::selectFirst(['url', 'alias'], ['network' => Protocol::TUMBLR, 'uid' => [0, $notification_data['uid']], 'poll' => 'tumblr::' . $page]);
 	if ($own_user) {
 		$notification_data['profiles'][] = $own_user['url'];
 		$notification_data['profiles'][] = $own_user['alias'];
@@ -98,7 +98,7 @@ function tumblr_probe_detect(array &$hookData)
 		return;
 	}
 
-	$hookData['result'] = tumblr_get_contact_by_url($hookData['uri']);
+	$hookData['result'] = tumblr_get_contact_by_url($hookData['uri'], $hookData['uid']);
 
 	// Authoritative probe should set the result even if the probe was unsuccessful
 	if ($hookData['network'] == Protocol::TUMBLR && empty($hookData['result'])) {
@@ -160,7 +160,7 @@ function tumblr_follow(array &$hook_data)
 
 	Logger::debug('Check if contact is Tumblr', ['url' => $hook_data['url']]);
 
-	$fields = tumblr_get_contact_by_url($hook_data['url']);
+	$fields = tumblr_get_contact_by_url($hook_data['url'], $uid);
 	if (empty($fields)) {
 		Logger::debug('Contact is not a Tumblr contact', ['url' => $hook_data['url']]);
 		return;
@@ -406,7 +406,7 @@ function tumblr_settings_post(array &$b)
 
 function tumblr_cron()
 {
-	$last = DI::keyValue()->get('tumblr_last_poll');
+	$last = (int)DI::keyValue()->get('tumblr_last_poll');
 
 	$poll_interval = intval(DI::config()->get('tumblr', 'poll_interval'));
 	if (!$poll_interval) {
@@ -439,9 +439,21 @@ function tumblr_cron()
 		}
 
 		Logger::notice('importing timeline - start', ['user' => $pconfig['uid']]);
-		tumblr_fetch_dashboard($pconfig['uid']);
-		tumblr_fetch_tags($pconfig['uid']);
+		tumblr_fetch_dashboard($pconfig['uid'], $last);
+		tumblr_fetch_tags($pconfig['uid'], $last);
 		Logger::notice('importing timeline - done', ['user' => $pconfig['uid']]);
+	}
+
+	$last_clean = DI::keyValue()->get('tumblr_last_clean');
+	if (empty($last_clean) || ($last_clean + 86400 < time())) {
+		Logger::notice('Start contact cleanup');
+		$contacts = DBA::select('account-user-view', ['id', 'pid'], ["`network` = ? AND `uid` != ? AND `rel` = ?", Protocol::TUMBLR, 0, Contact::NOTHING]);
+		while ($contact = DBA::fetch($contacts)) {
+			Worker::add(Worker::PRIORITY_LOW, 'MergeContact', $contact['pid'], $contact['id'], 0);
+		}
+		DBA::close($contacts);
+		DI::keyValue()->set('tumblr_last_clean', time());
+		Logger::notice('Contact cleanup done');
 	}
 
 	Logger::notice('cron_end');
@@ -665,9 +677,18 @@ function tumblr_send_npf(array $post): bool
 		return true;
 	}
 
-	$post['body'] = Post\Media::addAttachmentsToBody($post['uri-id'], $post['body']);
+	$post['body'] = Post\Media::addAttachmentsToBody($post['uri-id'], $post['body'], [Post\Media::IMAGE, Post\Media::AUDIO, Post\Media::VIDEO, Post\Media::ACTIVITY]);
 	if (!empty($post['title'])) {
 		$post['body'] = '[h1]' . $post['title'] . "[/h1]\n" . $post['body'];
+	}
+
+	if (!empty($post['quote-uri-id'])) {
+		$quote = Post::selectFirstPost(['uri', 'plink'], ['uri-id' => $post['quote-uri-id']]);
+		if (!empty($quote)) {
+			if ((strpos($post['body'], $quote['plink'] ?: $quote['uri']) === false) && (strpos($post['body'], $quote['uri']) === false)) {
+				$post['body'] .= "\n[url]" . ($quote['plink'] ?: $quote['uri']) . "[/url]\n";
+			}
+		}
 	}
 
 	$params = [
@@ -707,10 +728,11 @@ function tumblr_get_post_from_uri(string $uri): array
 /**
  * Fetch posts for user defined hashtags for the given user
  *
- * @param integer $uid
+ * @param int $uid
+ * @param int $last_poll
  * @return void
  */
-function tumblr_fetch_tags(int $uid)
+function tumblr_fetch_tags(int $uid, int $last_poll)
 {
 	if (!DI::config()->get('tumblr', 'max_tags') ?? TUMBLR_DEFAULT_MAXIMUM_TAGS) {
 		return;
@@ -719,9 +741,12 @@ function tumblr_fetch_tags(int $uid)
 	foreach (DI::pConfig()->get($uid, 'tumblr', 'tags') ?? [] as $tag) {
 		$data = tumblr_get($uid, 'tagged', ['tag' => $tag]);
 		foreach (array_reverse($data->response) as $post) {
-			$id = tumblr_process_post($post, $uid, Item::PR_TAG);
+			$id = tumblr_process_post($post, $uid, Item::PR_TAG, $last_poll);
 			if (!empty($id)) {
 				Logger::debug('Tag post imported', ['tag' => $tag, 'id' => $id]);
+				$post = Post::selectFirst(['uri-id'], ['id' => $id]);
+				$stored = Post\Category::storeFileByURIId($post['uri-id'], $uid, Post\Category::SUBCRIPTION, $tag);
+				Logger::debug('Stored tag subscription for user', ['uri-id' => $post['uri-id'], 'uid' => $uid, 'tag' => $tag, 'stored' => $stored]);
 			}
 		}
 	}
@@ -730,10 +755,11 @@ function tumblr_fetch_tags(int $uid)
 /**
  * Fetch the dashboard (timeline) for the given user
  *
- * @param integer $uid
+ * @param int $uid
+ * @param int $last_poll
  * @return void
  */
-function tumblr_fetch_dashboard(int $uid)
+function tumblr_fetch_dashboard(int $uid, int $last_poll)
 {
 	$parameters = ['reblog_info' => false, 'notes_info' => false, 'npf' => false];
 
@@ -759,13 +785,13 @@ function tumblr_fetch_dashboard(int $uid)
 
 		Logger::debug('Importing post', ['uid' => $uid, 'created' => date(DateTimeFormat::MYSQL, $post->timestamp), 'id' => $post->id_string]);
 
-		tumblr_process_post($post, $uid, Item::PR_NONE);
+		tumblr_process_post($post, $uid, Item::PR_NONE, $last_poll);
 
 		DI::pConfig()->set($uid, 'tumblr', 'last_id', $last);
 	}
 }
 
-function tumblr_process_post(stdClass $post, int $uid, int $post_reason): int
+function tumblr_process_post(stdClass $post, int $uid, int $post_reason, int $last_poll = 0): int
 {
 	$uri = 'tumblr::' . $post->id_string . ':' . $post->reblog_key;
 
@@ -783,7 +809,11 @@ function tumblr_process_post(stdClass $post, int $uid, int $post_reason): int
 		$item['post-reason'] = Item::PR_FOLLOWER;
 	}
 
-	$id = item::insert($item);
+	if (($last_poll != 0) && strtotime($item['created']) > $last_poll) {
+		$item['received'] = $item['created'];
+	}
+
+	$id = Item::insert($item);
 
 	if ($id) {
 		$stored = Post::selectFirst(['uri-id'], ['id' => $id]);
@@ -1042,39 +1072,58 @@ function tumblr_get_type_replacement(array $data, string $plink): string
  */
 function tumblr_get_contact(stdClass $blog, int $uid): array
 {
-	$condition = ['network' => Protocol::TUMBLR, 'uid' => $uid, 'poll' => 'tumblr::' . $blog->uuid];
-	$contact = Contact::selectFirst([], $condition);
-	if (!empty($contact) && (strtotime($contact['updated']) >= $blog->updated)) {
-		return $contact;
-	}
+	$condition = ['network' => Protocol::TUMBLR, 'uid' => 0, 'poll' => 'tumblr::' . $blog->uuid];
+	$contact = Contact::selectFirst(['id', 'updated'], $condition);
+
+	$update = empty($contact) || $contact['updated'] < DateTimeFormat::utc('now -24 hours');
+
+	$public_fields = $fields = tumblr_get_contact_fields($blog, $uid, $update);
+
+	$avatar = $fields['avatar'] ?? '';
+	unset($fields['avatar']);
+	unset($public_fields['avatar']);
+
+	$public_fields['uid'] = 0;
+	$public_fields['rel'] = Contact::NOTHING;
+
 	if (empty($contact)) {
-		$cid = tumblr_insert_contact($blog, $uid);
+		$cid = Contact::insert($public_fields);
 	} else {
 		$cid = $contact['id'];
+		Contact::update($public_fields, ['id' => $cid], true);
 	}
 
-	$condition['uid'] = 0;
+	if ($uid != 0) {
+		$condition = ['network' => Protocol::TUMBLR, 'uid' => $uid, 'poll' => 'tumblr::' . $blog->uuid];
 
-	$contact = Contact::selectFirst([], $condition);
-	if (empty($contact)) {
-		$pcid = tumblr_insert_contact($blog, 0);
+		$contact = Contact::selectFirst(['id', 'rel', 'uid'], $condition);
+		if (!isset($fields['rel']) && isset($contact['rel'])) {
+			$fields['rel'] = $contact['rel'];
+		} elseif (!isset($fields['rel'])) {
+			$fields['rel'] = Contact::NOTHING;
+		}
+	}
+
+	if (($uid != 0) && ($fields['rel'] != Contact::NOTHING)) {
+		if (empty($contact)) {
+			$cid = Contact::insert($fields);
+		} else {
+			$cid = $contact['id'];
+			Contact::update($fields, ['id' => $cid], true);
+		}
+		Logger::debug('Get user contact', ['id' => $cid, 'uid' => $uid, 'update' => $update]);
 	} else {
-		$pcid = $contact['id'];
+		Logger::debug('Get public contact', ['id' => $cid, 'uid' => $uid, 'update' => $update]);
 	}
 
-	tumblr_update_contact($blog, $uid, $cid, $pcid);
+	if (!empty($avatar)) {
+		Contact::updateAvatar($cid, $avatar);
+	}
 
 	return Contact::getById($cid);
 }
 
-/**
- * Create a new contact
- *
- * @param stdClass $blog
- * @param integer $uid
- * @return void
- */
-function tumblr_insert_contact(stdClass $blog, int $uid)
+function tumblr_get_contact_fields(stdClass $blog, int $uid, bool $update): array
 {
 	$baseurl = 'https://tumblr.com';
 	$url     = $baseurl . '/' . $blog->name;
@@ -1098,63 +1147,37 @@ function tumblr_insert_contact(stdClass $blog, int $uid)
 		'about'    => HTML::toBBCode($blog->description),
 		'updated'  => date(DateTimeFormat::MYSQL, $blog->updated)
 	];
-	return Contact::insert($fields);
-}
 
-/**
- * Updates the given contact for the given user and proviced contact ids
- *
- * @param stdClass $blog
- * @param integer $uid
- * @param integer $cid
- * @param integer $pcid
- * @return void
- */
-function tumblr_update_contact(stdClass $blog, int $uid, int $cid, int $pcid)
-{
+	if (!$update) {
+		Logger::debug('Got contact fields', ['uid' => $uid, 'url' => $fields['url']]);
+		return $fields;
+	}
+
 	$info = tumblr_get($uid, 'blog/' . $blog->uuid . '/info');
 	if ($info->meta->status > 399) {
-		Logger::notice('Error fetching dashboard', ['meta' => $info->meta, 'response' => $info->response, 'errors' => $info->errors]);
-		return;
+		Logger::notice('Error fetching blog info', ['meta' => $info->meta, 'response' => $info->response, 'errors' => $info->errors]);
+		return $fields;
 	}
 
 	$avatar = $info->response->blog->avatar;
 	if (!empty($avatar)) {
-		Contact::updateAvatar($cid, $avatar[0]->url);
+		$fields['avatar'] = $avatar[0]->url;
 	}
-
-	$baseurl = 'https://tumblr.com';
-	$url     = $baseurl . '/' . $info->response->blog->name;
 
 	if ($info->response->blog->followed && $info->response->blog->subscribed) {
-		$rel = Contact::FRIEND;
+		$fields['rel'] = Contact::FRIEND;
 	} elseif ($info->response->blog->followed && !$info->response->blog->subscribed) {
-		$rel = Contact::SHARING;
+		$fields['rel'] = Contact::SHARING;
 	} elseif (!$info->response->blog->followed && $info->response->blog->subscribed) {
-		$rel = Contact::FOLLOWER;
+		$fields['rel'] = Contact::FOLLOWER;
 	} else {
-		$rel = Contact::NOTHING;
+		$fields['rel'] = Contact::NOTHING;
 	}
 
-	$uri_id = ItemURI::getIdByURI($url);
-	$fields = [
-		'url'     => $url,
-		'nurl'    => Strings::normaliseLink($url),
-		'uri-id'  => $uri_id,
-		'alias'   => $info->response->blog->url,
-		'name'    => $info->response->blog->title ?: $info->response->blog->name,
-		'nick'    => $info->response->blog->name,
-		'addr'    => $info->response->blog->name . '@tumblr.com',
-		'about'   => HTML::toBBCode($info->response->blog->description),
-		'updated' => date(DateTimeFormat::MYSQL, $info->response->blog->updated),
-		'header'  => $info->response->blog->theme->header_image_focused,
-		'rel'     => $rel,
-	];
+	$fields['header'] = $info->response->blog->theme->header_image_focused;
 
-	Contact::update($fields, ['id' => $cid]);
-
-	$fields['rel'] = Contact::NOTHING;
-	Contact::update($fields, ['id' => $pcid]);
+	Logger::debug('Got updated contact fields', ['uid' => $uid, 'url' => $fields['url']]);
+	return $fields;
 }
 
 /**
@@ -1194,7 +1217,7 @@ function tumblr_get_page(int $uid, array $blogs = []): string
 function tumblr_get_blogs(int $uid): array
 {
 	$userinfo = tumblr_get($uid, 'user/info');
-	if ($userinfo->meta->status > 299) {
+	if ($userinfo->meta->status > 399) {
 		Logger::notice('Error fetching blogs', ['meta' => $userinfo->meta, 'response' => $userinfo->response, 'errors' => $userinfo->errors]);
 		return [];
 	}
@@ -1218,23 +1241,19 @@ function tumblr_enabled_for_user(int $uid)
  * Get a contact array from a Tumblr url
  *
  * @param string $url
+ * @param int    $uid
  * @return array|null
  * @throws \Friendica\Network\HTTPException\InternalServerErrorException
  */
-function tumblr_get_contact_by_url(string $url): ?array
+function tumblr_get_contact_by_url(string $url, int $uid): ?array
 {
-	$consumer_key = DI::config()->get('tumblr', 'consumer_key');
-	if (empty($consumer_key)) {
-		return null;
-	}
-
 	if (!preg_match('#^https?://tumblr.com/(.+)#', $url, $matches) && !preg_match('#^https?://www\.tumblr.com/(.+)#', $url, $matches) && !preg_match('#^https?://(.+)\.tumblr.com#', $url, $matches)) {
 		try {
 			$curlResult = DI::httpClient()->get($url);
 		} catch (\Exception $e) {
 			return null;
 		}
-		$html = $curlResult->getBody();
+		$html = $curlResult->getBodyString();
 		if (empty($html)) {
 			return null;
 		}
@@ -1253,42 +1272,38 @@ function tumblr_get_contact_by_url(string $url): ?array
 		return null;
 	}
 
-	Logger::debug('Update Tumblr blog data', ['url' => $url]);
+	Logger::debug('Update Tumblr blog data', ['url' => $url, 'blog' => $blog, 'uid' => $uid]);
 
-	$curlResult = DI::httpClient()->get('https://api.tumblr.com/v2/blog/' . $blog . '/info?api_key=' . $consumer_key);
-	$body = $curlResult->getBody();
-	$data = json_decode($body);
-	if (empty($data)) {
+	$info = tumblr_get($uid, 'blog/' . $blog . '/info');
+	if ($info->meta->status > 399) {
+		Logger::notice('Error fetching blog info', ['meta' => $info->meta, 'response' => $info->response, 'errors' => $info->errors, 'blog' => $blog, 'uid' => $uid]);
 		return null;
-	}
-
-	if (is_array($data->response->blog)) {
-		Logger::warning('Unexpected blog format', ['blog' => $blog, 'data' => $data]);
-		return null;
+	} else {
+		Logger::debug('Got data', ['blog' => $blog, 'meta' => $info->meta]);
 	}
 
 	$baseurl = 'https://tumblr.com';
-	$url     = $baseurl . '/' . $data->response->blog->name;
+	$url     = $baseurl . '/' . $info->response->blog->name;
 
 	return [
 		'url'      => $url,
 		'nurl'     => Strings::normaliseLink($url),
-		'addr'     => $data->response->blog->name . '@tumblr.com',
-		'alias'    => $data->response->blog->url,
+		'addr'     => $info->response->blog->name . '@tumblr.com',
+		'alias'    => $info->response->blog->url,
 		'batch'    => '',
 		'notify'   => '',
-		'poll'     => 'tumblr::' . $data->response->blog->uuid,
+		'poll'     => 'tumblr::' . $info->response->blog->uuid,
 		'poco'     => '',
-		'name'     => $data->response->blog->title ?: $data->response->blog->name,
-		'nick'     => $data->response->blog->name,
+		'name'     => $info->response->blog->title ?: $info->response->blog->name,
+		'nick'     => $info->response->blog->name,
 		'network'  => Protocol::TUMBLR,
 		'baseurl'  => $baseurl,
 		'pubkey'   => '',
 		'priority' => 0,
-		'guid'     => $data->response->blog->uuid,
-		'about'    => HTML::toBBCode($data->response->blog->description),
-		'photo'    => $data->response->blog->avatar[0]->url,
-		'header'   => $data->response->blog->theme->header_image_focused,
+		'guid'     => $info->response->blog->uuid,
+		'about'    => HTML::toBBCode($info->response->blog->description),
+		'photo'    => $info->response->blog->avatar[0]->url,
+		'header'   => $info->response->blog->theme->header_image_focused,
 	];
 }
 
@@ -1304,11 +1319,20 @@ function tumblr_get(int $uid, string $url, array $parameters = []): stdClass
 {
 	$url = 'https://api.tumblr.com/v2/' . $url;
 
+	if ($uid == 0) {
+		$consumer_key = DI::config()->get('tumblr', 'consumer_key');
+		$parameters['api_key'] = $consumer_key;
+	}
+
 	if (!empty($parameters)) {
 		$url .= '?' . http_build_query($parameters);
 	}
 
-	$curlResult = DI::httpClient()->get($url, HttpClientAccept::JSON, [HttpClientOptions::HEADERS => ['Authorization' => ['Bearer ' . tumblr_get_token($uid)]]]);
+	if ($uid > 0) {
+		$curlResult = DI::httpClient()->get($url, HttpClientAccept::JSON, [HttpClientOptions::HEADERS => ['Authorization' => ['Bearer ' . tumblr_get_token($uid)]]]);
+	} else {
+		$curlResult = DI::httpClient()->get($url, HttpClientAccept::JSON);
+	}
 	return tumblr_format_result($curlResult);
 }
 
@@ -1357,7 +1381,7 @@ function tumblr_delete(int $uid, string $url, array $parameters): stdClass
  */
 function tumblr_format_result(ICanHandleHttpResponses $curlResult): stdClass
 {
-	$result = json_decode($curlResult->getBody());
+	$result = json_decode($curlResult->getBodyString());
 	if (empty($result) || empty($result->meta)) {
 		$result               = new stdClass;
 		$result->meta         = new stdClass;
@@ -1411,11 +1435,11 @@ function tumblr_get_token(int $uid, string $code = ''): string
 
 		$curlResult = DI::httpClient()->post('https://api.tumblr.com/v2/oauth2/token', $parameters);
 		if (!$curlResult->isSuccess()) {
-			Logger::info('Error fetching token', ['uid' => $uid, 'code' => $code, 'result' => $curlResult->getBody(), 'parameters' => $parameters]);
+			Logger::info('Error fetching token', ['uid' => $uid, 'code' => $code, 'result' => $curlResult->getBodyString(), 'parameters' => $parameters]);
 			return '';
 		}
 
-		$result = json_decode($curlResult->getBody());
+		$result = json_decode($curlResult->getBodyString());
 		if (empty($result)) {
 			Logger::info('Invalid result when updating token', ['uid' => $uid]);
 			return '';

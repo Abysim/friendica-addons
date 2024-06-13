@@ -151,7 +151,7 @@ function libertree_send(array &$b)
 	}
 
 	// Dont't post if the post doesn't belong to us.
-	// This is a check for forum postings
+	// This is a check for group postings
 	$self = DBA::selectFirst('contact', ['id'], ['uid' => $b['uid'], 'self' => true]);
 	if ($b['contact-id'] != $self['id']) {
 		return;
@@ -201,7 +201,7 @@ function libertree_send(array &$b)
 		//	'token' => $ltree_api_token
 		];
 
-		$result = DI::httpClient()->post($ltree_blog, $params)->getBody();
+		$result = DI::httpClient()->post($ltree_blog, $params)->getBodyString();
 		Logger::notice('libertree: ' . $result);
 	}
 }
