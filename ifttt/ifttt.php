@@ -162,7 +162,7 @@ function ifttt_message($uid, $item)
 	$post['title'] = '';
 	$post['body'] = $item['msg'];
 	if (!empty($item['cat'])) {
-		$post['category'] = $item['cat'];
+		$post['file'] = '<' . $item['cat'] . '>';
 	}
 	//$post['date'] = $item['date'];
 	//$post['uri'] = $item['url'];
