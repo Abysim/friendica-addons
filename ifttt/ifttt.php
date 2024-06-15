@@ -143,9 +143,6 @@ function ifttt_post()
 	if (isset($_REQUEST['cat'])) {
 		$item['cat'] = trim($_REQUEST['cat']);
 	}
-	if (isset($_REQUEST['category'])) {
-		$item['cat'] = trim($_REQUEST['category']);
-	}
 	if (isset($_REQUEST['app'])) {
 		$item['app'] = trim($_REQUEST['app']);
 	}
@@ -166,7 +163,6 @@ function ifttt_message($uid, $item)
 	$post['body'] = $item['msg'];
 	if (!empty($item['cat'])) {
 		$post['category'] = $item['cat'];
-		$post['cat'] = $item['cat'];
 	}
 	//$post['date'] = $item['date'];
 	//$post['uri'] = $item['url'];
