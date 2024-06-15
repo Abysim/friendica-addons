@@ -332,7 +332,7 @@ class Configuration
 		 */
 		if ((strpos($endpoint, 'amazonaws.com') === false))
 		{
-			$this->setSignatureMethod('v2');
+			$this->setSignatureMethod('v4');
 		}
 
 		$this->endpoint = $endpoint;
