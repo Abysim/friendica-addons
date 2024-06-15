@@ -85,7 +85,7 @@ class S3Config implements ICanConfigureStorage
 		if (!empty($this->endpoint)) {
 			$config->setEndpoint($this->endpoint);
 		}
-		if (!empty($this->signatureMethod) && empty($this->endpoint)) {
+		if (!empty($this->signatureMethod)) {
 			$config->setSignatureMethod($this->signatureMethod);
 		}
 
@@ -133,7 +133,7 @@ class S3Config implements ICanConfigureStorage
 				'select',
 				$this->l10n->t('Signature Method'),
 				$this->signatureMethod,
-				$this->l10n->t('Set the signature method to use (BEWARE: v4 will be automatically set to v2 in case the endpoint isn\'t amazon)'),
+				$this->l10n->t('Set the signature method to use'),
 				$sigMethods,
 			],
 			'endpoint' => [

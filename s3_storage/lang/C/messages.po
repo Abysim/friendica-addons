@@ -1,7 +1,7 @@
 # ADDON s3_storage
-# Copyright (C) 
+# Copyright (C)
 # This file is distributed under the same license as the Friendica s3_storage addon package.
-# 
+#
 #
 #, fuzzy
 msgid ""
@@ -47,8 +47,7 @@ msgstr ""
 
 #: src/S3Config.php:136
 msgid ""
-"Set the signature method to use (BEWARE: v4 will be automatically set to v2 "
-"in case the endpoint isn't amazon)"
+"Set the signature method to use"
 msgstr ""
 
 #: src/S3Config.php:141
