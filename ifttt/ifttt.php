@@ -143,6 +143,12 @@ function ifttt_post()
 	if (isset($_REQUEST['cat'])) {
 		$item['cat'] = trim($_REQUEST['cat']);
 	}
+	if (isset($_REQUEST['category'])) {
+		$item['cat'] = trim($_REQUEST['category']);
+	}
+	if (isset($_REQUEST['app'])) {
+		$item['app'] = trim($_REQUEST['app']);
+	}
 
 	if ((substr($item['msg'], 0, 3) == '<<<') && (substr($item['msg'], -3, 3) == '>>>')) {
 		$item['msg'] = substr($item['msg'], 3, -3);
@@ -155,7 +161,7 @@ function ifttt_message($uid, $item)
 {
 	$post = [];
 	$post['uid'] = $uid;
-	$post['app'] = 'IFTTT';
+	$post['app'] = $item['app'] ?? 'IFTTT';
 	$post['title'] = '';
 	$post['body'] = $item['msg'];
 	if (!empty($item['cat'])) {
